@@ -151,22 +151,27 @@ REPONSES = {
     "finance": {"reponses": [{"objection_id": "O1", "attitude": "concede",
                               "texte": "Exact, le scénario à 50 % est illustratif. Condition proposée : mesurer pendant l'option C le temps de traitement sur un groupe témoin non volontaire [D1-§3]."}],
                 "position_revisee": "favorable_sous_conditions",
+                "option_revisee": "C",
                 "resume": "Option C maintenue, avec un protocole de mesure objectif comme condition de passage à A."},
     "strategie": {"reponses": [{"objection_id": "O2", "attitude": "ajuste",
                                 "texte": "Le dossier ne contient pas de retour client. Je retire l'argument comme fait établi et propose de sonder les trois grands comptes [D3-§1]."}],
                   "position_revisee": "favorable_sous_conditions",
-                  "resume": "A reste la cible stratégique, mais pas une décision pour décembre."},
+                "option_revisee": "C",
+                  "resume": "A reste la cible stratégique, mais C est la bonne décision pour décembre."},
     "operations": {"reponses": [{"objection_id": "O3", "attitude": "maintient",
                                  "texte": "C n'est acceptable que si le test de charge précède l'extension : passage à 600 par paliers de 150, avec le renforcement prévu au budget C [D2-§3]."}],
                    "position_revisee": "favorable_sous_conditions",
+                "option_revisee": "C",
                    "resume": "Favorable à C à condition d'une montée en charge par paliers après test."},
     "clients": {"reponses": [{"objection_id": "O4", "attitude": "ajuste",
                               "texte": "La relecture peut être ciblée : obligatoire pour les grands comptes, par échantillonnage ailleurs [D1-§4]."}],
                 "position_revisee": "favorable_sous_conditions",
-                "resume": "A reste souhaitable, à condition d'une relecture ciblée mesurée pendant C."},
+                "option_revisee": "C",
+                "resume": "Je me rallie à C : la relecture ciblée doit être mesurée avant de viser A."},
     "rh": {"reponses": [{"objection_id": "O5", "attitude": "concede",
                          "texte": "Oui, une extension significative justifie la consultation : il faut saisir le CSE dès janvier, ce qui reste compatible avec C mais pas avec une généralisation en 2027 [D4-§2]."}],
            "position_revisee": "favorable_sous_conditions",
+                "option_revisee": "C",
            "resume": "C avec saisine du CSE en janvier 2027."},
 }
 
@@ -270,5 +275,5 @@ def _generique(etape: str) -> dict:
         return {"position": "reserve", "option_preferee": "A", "resume": "[Simulation] Avis générique.",
                 "arguments": [], "hypotheses": [], "risques": [], "inconnues": [], "conditions_changement": [], "confiance": 2}
     if etape == "reponse":
-        return {"reponses": [], "position_revisee": "reserve", "resume": "[Simulation] Réponse générique."}
+        return {"reponses": [], "position_revisee": "reserve", "option_revisee": "A", "resume": "[Simulation] Réponse générique."}
     return {}

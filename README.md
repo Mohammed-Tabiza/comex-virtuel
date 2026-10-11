@@ -70,6 +70,43 @@ dans le compte rendu Markdown. Une citation existante n'atteste pas à elle seul
 d'une affirmation : le passage reste à vérifier. `protocole.synthese_max_tokens` fixe le budget
 de réponse de la synthèse détaillée (6 144 tokens par défaut).
 
+## Carte des positions et vue d'ensemble des critères
+
+L'onglet **Positions** place chaque expert sur une carte : la colonne indique l'option qu'il préfère,
+la hauteur sa position (favorable, sous conditions, réservé, défavorable). Les points apparaissent au fil
+des avis initiaux, puis glissent vers l'option et la position révisées après la contradiction.
+Le bouton **Rejouer l'évolution** relance l'animation ; un court récit résume ce qui a bougé.
+Le champ `option_revisee` de la réponse aux objections alimente ce déplacement.
+
+En tête de l'onglet **Décision**, une carte de chaleur résume l'évaluation de chaque option par critère.
+Les cases hachurées « À documenter » montrent ce que personne ne sait encore ; un clic sur une case
+affiche la justification et ses sources.
+
+## Rejouer une séance (démo sans risque)
+
+Chaque séance terminée est enregistrée dans `seances/<dossier>/rejeux/<id>.json` : journal complet
+des événements, configuration des agents au moment de la séance et compte rendu.
+Pour la rejouer, choisissez-la dans la liste à côté du dossier, réglez la vitesse (×1, ×2, ×4)
+et cliquez **Rejouer la séance**. Aucun modèle n'est appelé : le rejeu fonctionne sans réseau,
+même après un redémarrage du serveur.
+
+Usage conseillé pour une présentation : faire tourner la séance la veille avec les vrais modèles,
+puis la rejouer le jour J, en gardant le mode direct pour une seconde démonstration.
+Les silences sont raccourcis ; la validation du cadrage reste affichée quelques secondes.
+
+Un rejeu contient le contenu des analyses : versionnez uniquement ceux des dossiers non confidentiels.
+
+## Confidentialité des dossiers
+
+Chaque modèle déclare son hébergement dans `config.yaml` : `hebergement: interne` (vLLM sur site, par exemple)
+ou `externe` (modèles `-cloud` d'Ollama, API publiques). Sans déclaration, un modèle est considéré comme externe.
+
+Chaque dossier est **confidentiel par défaut**. Seul un fichier `_dossier.yaml` contenant
+`confidentiel: false` permet de l'envoyer à des modèles externes (c'est le cas du dossier fictif Altaris).
+En mode réel, une séance sur un dossier confidentiel est refusée dès qu'un seul agent pointe vers un
+modèle externe : le bouton est désactivé dans l'interface et l'API répond 403. L'en-tête affiche en
+permanence le statut du dossier et l'hébergement des modèles. Le mode simulation n'envoie aucune donnée.
+
 ## Créer un nouveau dossier
 
 1. Créez un répertoire dans `seances/`, par exemple `seances/cloud-souverain/`.
@@ -77,6 +114,8 @@ de réponse de la synthèse détaillée (6 144 tokens par défaut).
 3. Ajoutez vos documents en Markdown (`01_...md`, `02_...md`). Pour convertir des PDF ou des Word :
    `pip install markitdown` puis `markitdown rapport.pdf > 01_rapport.md`.
 4. Chaque titre de niveau 2 (`## …`) devient une section citable. Les fichiers commençant par `_` sont ignorés.
+5. Le dossier est confidentiel par défaut. S'il est fictif ou public, ajoutez un `_dossier.yaml`
+   avec `confidentiel: false` et une `description`.
 
 Budget : le compteur de l'en-tête estime la taille du dossier. Restez sous 15 000 tokens pour laisser
 la place aux instructions et aux réponses avec un contexte de 32K.
@@ -94,7 +133,9 @@ app/server.py          API FastAPI et flux SSE
 app/rapport.py         compte rendu Markdown
 app/simulation.py      réponses préenregistrées du dossier d'exemple
 static/index.html      interface (sans étape de build)
-seances/               dossiers de séance ; les comptes rendus sont écrits dans <dossier>/resultats/
+seances/               dossiers de séance ; comptes rendus dans <dossier>/resultats/ (non versionnés),
+                       rejeux dans <dossier>/rejeux/, métadonnées dans <dossier>/_dossier.yaml
+tests/                 python -m unittest discover tests
 ```
 
 ## Dépannage

@@ -1,0 +1,5 @@
+# Métadonnées du dossier de séance.
+# Sans ce fichier, ou sans « confidentiel: false », un dossier est traité comme confidentiel :
+# il ne peut alors être analysé que par des modèles déclarés « hebergement: interne » dans config.yaml.
+confidentiel: false
+description: "Cas fictif (Groupe Altaris) pour démonstration"

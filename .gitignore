@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Résultats de séance (comptes rendus et états) : générés à chaque exécution
+seances/*/resultats/
+# Rejeux : seuls ceux des dossiers non confidentiels peuvent être versionnés (voir README)
+# Traces d'outils de test et d'analyse
+.playwright-mcp/

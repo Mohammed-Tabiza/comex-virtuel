@@ -106,6 +106,7 @@ SCHEMAS = {
             "texte": _TXT,
         })},
         "position_revisee": _POSITION,
+        "option_revisee": _TXT,
         "resume": _TXT,
     }),
     "synthese": _obj({
@@ -213,7 +214,8 @@ def prompt_reponse(agent_id: str, avis_propre: dict, objections: list) -> str:
         _bloc("Objections qui te sont adressées", objections) + (
         "## Tâche : réponse aux objections\n"
         "Pour chaque objection, indique si tu maintiens ta position, l'ajustes ou concèdes, avec une justification "
-        "sourcée. Concéder un point fondé est une qualité, pas une faiblesse. Donne ta position révisée.\n"
+        "sourcée. Concéder un point fondé est une qualité, pas une faiblesse. Donne ta position révisée et l'identifiant "
+        "de l'option que tu préfères désormais (option_revisee), qui peut rester la même.\n"
     ) + _schema("reponse")
 
 

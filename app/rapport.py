@@ -22,12 +22,14 @@ def compte_rendu(seance, etat: dict) -> str:
 
     l += ["", "## Recommandation conditionnelle", syn.get("recommandation", "(synthèse non disponible)"), "",
           "### Conditions", _liste(syn.get("conditions")), "", "## Positions des membres", "",
-          "| Membre | Modèle | Option | Position initiale | Position après contradiction |", "|---|---|---|---|---|"]
+          "| Membre | Modèle | Option initiale | Position initiale | Option après contradiction | Position après contradiction |",
+          "|---|---|---|---|---|---|"]
     for cle, avis in (etat.get("avis") or {}).items():
         agent = cle.split(":")[0]
         rep = (etat.get("reponses") or {}).get(f"{agent}:reponse") or {}
         l.append(f"| {AGENTS[agent]['titre']} | {avis['_meta']['libelle']} | {avis.get('option_preferee', '')} | "
-                 f"{POSITIONS.get(avis.get('position'), '')} | {POSITIONS.get(rep.get('position_revisee'), '-')} |")
+                 f"{POSITIONS.get(avis.get('position'), '')} | {rep.get('option_revisee', '-') if rep else '-'} | "
+                 f"{POSITIONS.get(rep.get('position_revisee'), '-')} |")
 
     l += ["", "## Comparaison des options"]
     for option in syn.get("options", []):

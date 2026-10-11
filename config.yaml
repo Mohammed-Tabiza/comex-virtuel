@@ -1,5 +1,11 @@
 # Configuration du COMEX virtuel
 # Les valeurs ${NOM} sont remplacées par les variables d'environnement correspondantes.
+#
+# hebergement (par modèle) : interne | externe
+#   interne : le modèle tourne dans l'entreprise (ex. vLLM sur site)
+#   externe : les données sortent de l'entreprise (ex. modèles -cloud d'Ollama). Valeur par défaut.
+# En mode reel, un dossier confidentiel ne peut être confié qu'à des modèles internes :
+# la séance est refusée si un seul agent pointe vers un modèle externe.
 
 # simulation : réponses préenregistrées, aucun appel aux modèles (pour tester l'interface)
 # reel       : appels à Ollama
@@ -10,6 +16,7 @@ modeles:
   gemma:
     libelle: "Gemma 4 31B Cloud"
     famille: ollama
+    hebergement: externe              # modèle -cloud : exécuté sur les serveurs d'Ollama
     base_url: "http://localhost:11434/v1"
     api_key: ""                      # aucune clé API
     model: "gemma4:31b-cloud"
@@ -21,6 +28,7 @@ modeles:
   gpt_oss:
     libelle: "GPT OSS 120B Cloud"
     famille: ollama
+    hebergement: externe
     base_url: "http://localhost:11434/v1"
     api_key: ""                      # aucune clé API
     model: "gpt-oss:120b-cloud"

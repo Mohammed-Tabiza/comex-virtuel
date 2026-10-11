@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 REF = re.compile(r"\[?(D\d+-§\d+)\]?")
 
 
@@ -31,6 +33,10 @@ class Dossier:
     documents: list[Document]
     texte: str            # dossier complet, tel qu'injecté dans les prompts
     tokens_estimes: int
+    # Confidentiel par défaut : seul un dossier explicitement déclaré non confidentiel
+    # (fichier _dossier.yaml) peut être envoyé à des modèles hébergés hors de l'entreprise.
+    confidentiel: bool = True
+    description: str = ""
 
     @property
     def refs(self) -> set[str]:
@@ -47,6 +53,8 @@ class Dossier:
         return {
             "nom": self.nom,
             "tokens_estimes": self.tokens_estimes,
+            "confidentiel": self.confidentiel,
+            "description": self.description,
             "documents": [
                 {"id": d.id, "fichier": d.fichier, "titre": d.titre,
                  "sections": [{"ref": s.ref, "titre": s.titre} for s in d.sections]}
@@ -90,7 +98,16 @@ def charger_dossier(repertoire: Path) -> Dossier:
         for s in d.sections:
             blocs.append(f"[{s.ref}] {s.titre}\n{s.texte}")
     texte = "\n\n".join(blocs)
-    return Dossier(nom=repertoire.name, documents=documents, texte=texte, tokens_estimes=estimer_tokens(texte))
+    meta = lire_meta(repertoire)
+    return Dossier(nom=repertoire.name, documents=documents, texte=texte, tokens_estimes=estimer_tokens(texte),
+                   confidentiel=meta["confidentiel"], description=meta["description"])
+
+
+def lire_meta(repertoire: Path) -> dict:
+    """Lit _dossier.yaml. Toute valeur autre que `confidentiel: false` laisse le dossier confidentiel."""
+    chemin = repertoire / "_dossier.yaml"
+    meta = (yaml.safe_load(chemin.read_text(encoding="utf-8")) or {}) if chemin.exists() else {}
+    return {"confidentiel": meta.get("confidentiel") is not False, "description": str(meta.get("description", ""))}
 
 
 def refs_citees(obj) -> set[str]:

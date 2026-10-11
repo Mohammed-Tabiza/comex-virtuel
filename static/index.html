@@ -28,7 +28,7 @@ header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:
 .marque span{color:var(--brass)}
 .ctrl{display:flex;gap:8px;align-items:center;margin-left:8px}
 select{background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:7px 10px;min-width:200px}
-.btn{background:var(--brass);color:#1a1408;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn{background:var(--brass);color:#1a1408;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;white-space:nowrap}
 .btn:disabled{opacity:.45;cursor:default}
 .btn.sec{background:transparent;color:var(--text);border:1px solid var(--line-2)}
 .chips{display:flex;gap:8px;margin-left:auto;align-items:center;flex-wrap:wrap;justify-content:flex-end}
@@ -36,6 +36,9 @@ select{background:var(--panel-2);border:1px solid var(--line-2);border-radius:8p
 .chip.sim{color:var(--warn);border-color:rgba(242,193,78,.4)}
 .chip.reel{color:var(--ok);border-color:rgba(95,207,138,.4)}
 .chip.alerte{color:var(--err);border-color:rgba(255,107,107,.5)}
+.chip.conf{color:var(--brass);border-color:rgba(201,162,92,.5)}
+.chip.rejeu{color:var(--think);border-color:rgba(180,140,255,.5)}
+#choixRejeu{min-width:0;width:250px;text-overflow:ellipsis} #vitesse{min-width:0}
 
 /* ---------- étapes */
 .etapes{display:flex;gap:0;padding:10px 20px;border-bottom:1px solid var(--line);overflow-x:auto}
@@ -48,7 +51,7 @@ select{background:var(--panel-2);border:1px solid var(--line-2);border-radius:8p
 /* ---------- corps */
 main{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(360px,1fr);min-height:0}
 .salle{position:relative;min-height:0;overflow:hidden;border-right:1px solid var(--line)}
-.table-zone{position:absolute;inset:18px 18px 46px}
+.table-zone{position:absolute;inset:40px 18px 46px}
 .table{position:absolute;left:19%;right:19%;top:21%;bottom:21%;border-radius:50%;
   background:radial-gradient(ellipse at 50% 40%,#232c38 0%,#18202a 60%,#121820 100%);
   border:1px solid rgba(201,162,92,.35);box-shadow:inset 0 0 60px rgba(0,0,0,.45),0 20px 60px rgba(0,0,0,.35);
@@ -123,6 +126,35 @@ aside{display:flex;flex-direction:column;min-height:0;background:var(--panel)}
 .att.maintient{color:var(--res)} .att.ajuste{color:var(--qwen14)} .att.concede{color:var(--fav)}
 .note{font-size:12.5px;color:var(--muted);border:1px dashed var(--line-2);border-radius:10px;padding:9px 12px;margin-bottom:10px}
 
+/* carte des positions */
+.arene{position:relative;height:360px;margin:6px 0 8px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2);overflow:hidden}
+.arene .couloir{position:absolute;top:0;bottom:0;border-left:1px dashed var(--line)}
+.arene .nom-couloir{position:absolute;bottom:8px;transform:translateX(-50%);font-size:11.5px;color:var(--muted);text-align:center;width:28%;line-height:1.25}
+.arene .nom-couloir b{display:block;color:var(--text);font-size:13px}
+.arene .niveau{position:absolute;left:0;right:0;border-top:1px solid rgba(255,255,255,.045)}
+.arene .niveau span{position:absolute;left:8px;top:-8px;font-size:10px;letter-spacing:.4px;color:var(--faint);background:var(--panel-2);padding-right:4px;text-transform:uppercase}
+.point{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;display:grid;place-items:center;font:600 11px var(--sans);
+  color:var(--c);background:color-mix(in srgb,var(--c) 22%,var(--panel));border:1.5px solid var(--c);z-index:2;opacity:0;
+  transition:left 1.5s cubic-bezier(.6,0,.2,1),top 1.5s cubic-bezier(.6,0,.2,1),opacity .5s,box-shadow .4s}
+.point.visible{opacity:1}
+.point.bouge{box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 22%,transparent)}
+.arene.sans-transition .point{transition:none}
+.arene svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.arene svg path{fill:none;stroke:var(--muted);stroke-width:1.4;stroke-dasharray:4 4;opacity:0;transition:opacity .6s 1.4s}
+.arene.final svg path{opacity:.7}
+.arene.sans-transition svg path{opacity:0;transition:none}
+.recit{font-size:13px;color:var(--muted);line-height:1.6}
+.recit b{color:var(--text)}
+.chaleur{display:grid;gap:4px;margin-top:6px;font-size:12px;align-items:stretch}
+.chaleur .tete{color:var(--muted);font-size:11.5px;text-align:center;align-self:end;padding-bottom:2px}
+.chaleur .crit{color:var(--muted);align-self:center;padding-right:6px;line-height:1.3}
+.cellule{border:0;border-radius:6px;padding:9px 4px;font-weight:600;font-size:11.5px;cursor:pointer;text-align:center;font-family:var(--sans)}
+.cellule:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+.ev-favorable{background:rgba(95,207,138,.18);color:var(--fav)}
+.ev-mitige{background:rgba(242,193,78,.16);color:var(--res)}
+.ev-defavorable{background:rgba(255,107,107,.17);color:var(--def)}
+.ev-inconnu{background:repeating-linear-gradient(135deg,rgba(154,163,174,.13) 0 6px,rgba(154,163,174,.05) 6px 12px);color:var(--muted)}
+
 /* dossier */
 .doc{margin-bottom:14px} .doc b{font-size:13px}
 .doc .sec{display:flex;gap:8px;align-items:baseline;margin:4px 0;font-size:12.5px;color:var(--muted)}
@@ -179,9 +211,12 @@ textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--
     <div class="marque">COMEX <span>virtuel</span></div>
     <div class="ctrl">
       <select id="choixDossier" aria-label="Dossier de séance"></select>
+      <select id="choixRejeu" aria-label="Séance en direct ou rejeu d'une séance enregistrée"></select>
+      <select id="vitesse" aria-label="Vitesse du rejeu" hidden><option value="1">×1</option><option value="2" selected>×2</option><option value="4">×4</option></select>
       <button class="btn" id="btnLancer">Ouvrir la séance</button>
     </div>
     <div class="chips">
+      <span class="chip" id="chipConf" hidden></span>
       <span class="chip" id="chipTokens">Dossier : —</span>
       <span class="chip" id="chipChrono">00:00</span>
       <span class="chip" id="chipMode">—</span>
@@ -212,10 +247,12 @@ textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--
     <aside>
       <div class="onglets">
         <button class="onglet on" data-vue="debat">Débat en direct<span class="n" id="nDebat"></span></button>
+        <button class="onglet" data-vue="positions">Positions<span class="n" id="nPositions"></span></button>
         <button class="onglet" data-vue="dossier">Dossier</button>
         <button class="onglet" data-vue="decision">Décision</button>
       </div>
       <div class="vue on" id="vue-debat"><div class="vide">Les contributions des membres<br>apparaîtront ici en temps réel.</div></div>
+      <div class="vue" id="vue-positions"><div class="vide">La carte des positions se remplit<br>au fil des avis des membres.</div></div>
       <div class="vue" id="vue-dossier"></div>
       <div class="vue" id="vue-decision"><div class="vide">Le dossier de décision sera disponible<br>à la fin de la séance.</div></div>
     </aside>
@@ -231,13 +268,19 @@ const ANGLES = {president:-90, strategie:-38, finance:5, clients:47, contradicte
 const RX = 36.5, RY = 41;   // rayons de l'ellipse des sièges, en % de la zone
 const PHASES = [["cadrage","Cadrage"],["validation","Validation humaine"],["analyses","Analyses indépendantes"],
   ["contradiction","Contradiction"],["reponses","Réponses"],["synthese","Synthèse"],["arbitrage","Arbitrage"]];
-const COULEURS = {qwen27b:"var(--qwen)", qwen14b:"var(--qwen14)", mistral:"var(--mistral)"};
+// Une couleur par modèle, attribuée dans l'ordre de config.yaml (quels que soient les noms des modèles)
+const PALETTE = ["#8b97ff", "#ff8f45", "#3fc7b5", "#e58bd0", "#c9a25c"];
+let COULEURS = {};
+const NIVEAUX = ["favorable", "favorable_sous_conditions", "reserve", "defavorable"];
+const NIVEAUX_COURTS = {favorable:"Favorable", favorable_sous_conditions:"Sous conditions", reserve:"Réservé", defavorable:"Défavorable"};
 const ETAPES = {cadrage:"Cadrage", avis:"Avis initial", contre_analyse:"Contre-analyse", objections:"Objections", reponse:"Réponse", synthese:"Synthèse"};
 const POS = {favorable:"Favorable", favorable_sous_conditions:"Favorable s/ conditions", reserve:"Réservé", defavorable:"Défavorable"};
 const STATUTS = {attente:"En attente", analyse:"Lecture du dossier", reflexion:"Réflexion", redaction:"Rédaction", termine:"Terminé", erreur:"Erreur"};
 
 const $ = s => document.querySelector(s);
-const S = {config:null, seance:null, dossier:null, source:null, agents:{}, contributions:0, tokens:0, avis:{}, reponses:{}, objections:[], cadrage:null, synthese:null, refsValides:new Set(), t:0, timer:null, phase:null};
+const S = {config:null, configLive:null, seance:null, dossier:null, source:null, agents:{}, contributions:0, tokens:0, avis:{}, reponses:{}, objections:[], cadrage:null, synthese:null, refsValides:new Set(), t:0, timer:null, phase:null,
+  rejeu:null, jetonRejeu:0, posInit:{}, posFin:{}, positionsVues:false};
+const pause = ms => new Promise(r => setTimeout(r, ms));
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const avecRefs = s => esc(s).replace(/\[?(D\d+-§\d+)\]?/g, (_, r) => chipRef(r));
@@ -251,24 +294,23 @@ const nomAgent = id => S.config.agents[id]?.nom || id;
 
 // ------------------------------------------------------------------ initialisation
 async function init() {
-  S.config = await (await fetch("/api/config")).json();
-  const mode = $("#chipMode");
-  mode.textContent = S.config.mode === "reel" ? "Modèles réels" : "Mode simulation";
-  mode.className = "chip " + (S.config.mode === "reel" ? "reel" : "sim");
+  S.config = S.configLive = await (await fetch("/api/config")).json();
+  definirCouleurs(); majChipMode();
 
   const dossiers = await (await fetch("/api/dossiers")).json();
   $("#choixDossier").innerHTML = dossiers.map(d => `<option>${esc(d)}</option>`).join("");
   $("#choixDossier").onchange = chargerDossier;
+  $("#choixRejeu").onchange = majBouton;
   $("#btnLancer").onclick = lancer;
 
   $("#etapes").innerHTML = PHASES.map(([id, l]) => `<div class="etape" data-ph="${id}"><span class="pt"></span>${l}</div>`).join("");
-  const modeles = {};
-  Object.values(S.config.agents).forEach(a => modeles[a.modele] = a.libelle_modele);
-  $("#legende").innerHTML = Object.entries(modeles).map(([m, l]) => `<span><i style="background:${COULEURS[m] || "var(--brass)"}"></i>${esc(l)}</span>`).join("");
-
+  majLegende();
   creerSieges();
   document.querySelectorAll(".onglet").forEach(b => b.onclick = () => ouvrirOnglet(b.dataset.vue));
-  document.addEventListener("click", e => { const r = e.target.closest(".ref[data-ref]"); if (r) voirSection(r.dataset.ref, r.dataset.dossier); });
+  document.addEventListener("click", e => {
+    const r = e.target.closest(".ref[data-ref]"); if (r) return voirSection(r.dataset.ref, r.dataset.dossier);
+    const c = e.target.closest(".cellule[data-o]"); if (c) return voirCritere(+c.dataset.o, +c.dataset.c);
+  });
   $("#pop").onclick = e => { if (e.target.id === "pop" || e.target.closest("[data-fermer-source]")) fermerSection(); };
   document.addEventListener("keydown", e => {
     if (!$("#pop").classList.contains("on")) return;
@@ -282,6 +324,30 @@ async function init() {
   });
   window.addEventListener("resize", dessinerLiens);
   if (dossiers.length) chargerDossier();
+}
+
+function definirCouleurs() {
+  const noms = Object.keys(S.config.modeles || {});
+  Object.values(S.config.agents).forEach(a => { if (!noms.includes(a.modele)) noms.push(a.modele); });
+  COULEURS = Object.fromEntries(noms.map((m, i) => [m, PALETTE[i % PALETTE.length]]));
+}
+
+function majLegende() {
+  const modeles = {};
+  Object.values(S.config.agents).forEach(a => modeles[a.modele] = a);
+  $("#legende").innerHTML = Object.entries(modeles).map(([m, a]) =>
+    `<span><i style="background:${COULEURS[m]}"></i>${esc(a.libelle_modele)}${a.hebergement === "externe" ? " · externe" : a.hebergement === "interne" ? " · interne" : ""}</span>`).join("");
+}
+
+function majChipMode() {
+  const mode = $("#chipMode");
+  if (S.rejeu) {
+    mode.textContent = `Rejeu ×${$("#vitesse").value} · ${S.rejeu.mode === "reel" ? "modèles réels" : "simulation"}`;
+    mode.className = "chip rejeu"; return;
+  }
+  const externe = Object.values(S.config.agents).some(a => a.hebergement !== "interne");
+  mode.textContent = S.config.mode === "reel" ? (externe ? "Modèles réels · externes" : "Modèles réels · internes") : "Mode simulation";
+  mode.className = "chip " + (S.config.mode === "reel" ? (externe ? "sim" : "reel") : "sim");
 }
 
 function creerSieges() {
@@ -308,10 +374,35 @@ async function chargerDossier() {
   const d = await (await fetch(`/api/dossiers/${encodeURIComponent(nom)}`)).json();
   S.dossier = d;
   S.refsValides = new Set(d.documents.flatMap(doc => doc.sections.map(s => s.ref)));
-  majTokens(d.tokens_estimes, S.config.budget_dossier_tokens);
+  majTokens(d.tokens_estimes, S.configLive.budget_dossier_tokens);
+  const conf = $("#chipConf");
+  conf.hidden = false;
+  conf.textContent = d.confidentiel ? "Confidentiel · modèles internes" : "Non confidentiel";
+  conf.className = "chip" + (d.confidentiel ? " conf" : "");
+  conf.title = d.description || (d.confidentiel ? "Ce dossier ne peut être confié qu'à des modèles hébergés dans l'entreprise." : "");
+  await chargerRejeux();
   $("#vue-dossier").innerHTML = `<div class="note">Chaque agent analyse le même dossier. Cliquez sur une référence pour lire le passage cité.</div>` +
     d.documents.map(doc => `<div class="doc"><b>${doc.id} · ${esc(doc.titre)}</b><div style="font-size:11px;color:var(--faint)">${esc(doc.fichier)}</div>
       ${doc.sections.map(s => `<div class="sec">${chipRef(s.ref)}<span>${esc(s.titre)}</span></div>`).join("")}</div>`).join("");
+}
+
+async function chargerRejeux(selection = "") {
+  const liste = S.dossier ? await (await fetch(`/api/dossiers/${encodeURIComponent(S.dossier.nom)}/rejeux`)).json() : [];
+  const duree = t => `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  $("#choixRejeu").innerHTML = `<option value="">Séance en direct</option>` + liste.map(r =>
+    `<option value="${esc(r.id)}" title="${esc((r.modeles || []).join(" + "))}">Rejeu du ${esc(new Date(r.date).toLocaleString("fr-FR", {dateStyle: "short", timeStyle: "short"}))} (${duree(r.duree || 0)}${r.mode !== "reel" ? ", simulation" : ""}${r.decision ? ", décision" : ""})</option>`).join("");
+  $("#choixRejeu").value = selection;
+  majBouton();
+}
+
+function majBouton() {
+  const rejeu = !!$("#choixRejeu").value, bouton = $("#btnLancer");
+  $("#vitesse").hidden = !rejeu;
+  bouton.textContent = rejeu ? "Rejouer la séance" : "Ouvrir la séance";
+  const blocage = !rejeu && S.dossier?.blocage;
+  bouton.disabled = !!blocage;
+  bouton.title = blocage ? blocage.message : "";
+  if (blocage) toast(blocage.message);
 }
 
 function majTokens(n, budget) {
@@ -321,22 +412,60 @@ function majTokens(n, budget) {
 }
 
 // ------------------------------------------------------------------ séance
-async function lancer() {
+function reinitialiser(config) {
   if (S.source) S.source.close();
-  Object.assign(S, {avis:{}, reponses:{}, objections:[], cadrage:null, synthese:null, contributions:0, tokens:0, t:0, phase:null});
+  S.jetonRejeu++;                                   // interrompt un rejeu en cours
+  S.config = config; definirCouleurs(); majLegende();
+  Object.assign(S, {avis:{}, reponses:{}, objections:[], cadrage:null, synthese:null, contributions:0, tokens:0, t:0, phase:null,
+    posInit:{}, posFin:{}, positionsVues:false, liens:[]});
   creerSieges(); dessinerLiens();
-  $("#vue-debat").innerHTML = ""; $("#nDebat").textContent = "";
+  document.querySelectorAll(".etape").forEach(el => el.className = "etape");
+  $("#vue-debat").innerHTML = ""; $("#nDebat").textContent = ""; $("#nPositions").textContent = "";
+  $("#vue-positions").innerHTML = `<div class="vide">La carte des positions se remplit<br>au fil des avis des membres.</div>`;
   $("#vue-decision").innerHTML = `<div class="vide">Le dossier de décision sera disponible<br>à la fin de la séance.</div>`;
-  $("#question").textContent = "Ouverture de la séance…";
+  $("#voile").classList.remove("on");
+  $("#question").textContent = "Ouverture de la séance…"; $("#stats").textContent = "";
+  ouvrirOnglet("debat");
+  clearInterval(S.timer); const debut = Date.now();
+  S.timer = setInterval(() => { const s = Math.floor((Date.now() - debut) / 1000); $("#chipChrono").textContent = `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; }, 500);
+}
+
+async function lancer() {
+  const rejeu = $("#choixRejeu").value;
+  if (rejeu) return rejouer(rejeu);
+  S.rejeu = null;
+  reinitialiser(S.configLive); majChipMode();
   $("#btnLancer").disabled = true;
   $("#choixDossier").disabled = true;
   const r = await fetch("/api/seances", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({dossier: $("#choixDossier").value})});
-  if (!r.ok) { toast("Impossible d'ouvrir la séance"); $("#btnLancer").disabled = false; $("#choixDossier").disabled = false; return; }
+  if (!r.ok) {
+    const detail = (await r.json().catch(() => ({}))).detail;
+    toast(detail?.message || "Impossible d'ouvrir la séance");
+    clearInterval(S.timer); $("#btnLancer").disabled = false; $("#choixDossier").disabled = false; return;
+  }
   S.seance = (await r.json()).seance_id;
-  clearInterval(S.timer); const debut = Date.now();
-  S.timer = setInterval(() => { const s = Math.floor((Date.now() - debut) / 1000); $("#chipChrono").textContent = `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; }, 500);
   S.source = new EventSource(`/api/seances/${S.seance}/evenements`);
   S.source.onmessage = m => traiter(JSON.parse(m.data));
+}
+
+// Rejoue le journal d'une séance enregistrée, sans appeler aucun modèle (démo sans risque)
+async function rejouer(id) {
+  const r = await fetch(`/api/dossiers/${encodeURIComponent(S.dossier.nom)}/rejeux/${encodeURIComponent(id)}`);
+  if (!r.ok) return toast("Rejeu introuvable");
+  const data = await r.json();
+  S.rejeu = data; S.seance = null;
+  reinitialiser({...S.configLive, mode: data.mode, agents: data.config.agents, modeles: data.config.modeles});
+  majChipMode();
+  const jeton = S.jetonRejeu, vitesse = +$("#vitesse").value;
+  let precedent = 0;
+  for (const e of data.evenements) {
+    const ecart = Math.max(0, e.t - precedent); precedent = e.t;
+    // Les silences sont raccourcis ; la validation humaine reste visible quelques secondes
+    const attente = e.type === "validation_humaine" ? Math.max(3, Math.min(ecart, 5)) : Math.min(ecart, 2.5);
+    await pause(attente / vitesse * 1000);
+    if (jeton !== S.jetonRejeu) return;            // un autre rejeu ou une séance en direct a démarré
+    traiter(e);
+  }
 }
 
 function traiter(e) {
@@ -351,7 +480,7 @@ function traiter(e) {
     case "validation_humaine": $("#voile").classList.remove("on");
       note(e.action === "valider" ? "Cadrage validé par le décideur. Les analyses indépendantes démarrent." : "Nouveau cadrage demandé par le décideur.", e.complement); break;
     case "seance_terminee": fin(e); break;
-    case "decision_enregistree": note("Décision humaine enregistrée dans le compte rendu."); break;
+    case "decision_enregistree": note("Décision humaine enregistrée dans le compte rendu.", e.texte); break;
     case "erreur": toast(e.message); $("#btnLancer").disabled = false; $("#choixDossier").disabled = false; clearInterval(S.timer); break;
   }
 }
@@ -399,6 +528,8 @@ function contribution(e) {
     corps = `<p>${avecRefs(c.question_reformulee)}</p>${liste("Options", c.options, o => `<b>${esc(o.id)}</b> · ${esc(o.nom)} : ${avecRefs(o.description)}`)}${liste("Critères", c.criteres)}`;
   } else if (e.etape === "avis") {
     S.avis[id] = c;
+    S.posInit[id] = {opt: c.option_preferee, pos: c.position};
+    rendreArene(false);
     el.querySelector(".s-bas").innerHTML = `<span class="pos ${c.position}">${POS[c.position]}</span><span>Option ${esc(c.option_preferee)}</span><span>${e.meta.sources.length} sources</span>`;
     corps = `<div class="c-tete" style="margin-top:6px"><span class="pos ${c.position}">${POS[c.position]}</span><span style="font-size:12px;color:var(--muted)">Option ${esc(c.option_preferee)} · confiance ${"●".repeat(c.confiance)}${"○".repeat(5 - c.confiance)}</span></div>
       <p>${avecRefs(c.resume)}</p><details><summary>Arguments, hypothèses et inconnues</summary>
@@ -413,6 +544,9 @@ function contribution(e) {
     corps = c.objections.map(o => `<div class="obj"><span class="id">${esc(o.id)}</span><div><b>→ ${esc(nomAgent(o.cible))}</b> ${argumentSource(o)}</div></div>`).join("");
   } else if (e.etape === "reponse") {
     S.reponses[id] = c;
+    S.posFin[id] = {opt: c.option_revisee || S.posInit[id]?.opt, pos: c.position_revisee};
+    rendreArene(true);
+    if (!S.positionsVues) { S.positionsVues = true; ouvrirOnglet("positions"); }
     if (S.avis[id]) el.querySelector(".s-bas").innerHTML = `<span class="pos ${S.avis[id].position}" style="opacity:.55">${POS[S.avis[id].position]}</span>→<span class="pos ${c.position_revisee}">${POS[c.position_revisee]}</span>`;
     corps = c.reponses.map(r => `<div class="obj"><span class="id">${esc(r.objection_id)}</span><div><span class="att ${r.attitude}">${esc(r.attitude)}</span> ${avecRefs(r.texte)}</div></div>`).join("") +
       `<p style="color:var(--muted)">Position révisée : <span class="pos ${c.position_revisee}">${POS[c.position_revisee]}</span></p>`;
@@ -465,6 +599,11 @@ function ouvrirValidation(c) {
     <div class="actions"><button class="btn" id="btnValider">Valider et lancer les analyses</button>
       <button class="btn sec" id="btnRecadrer">Demander un nouveau cadrage</button></div>`;
   $("#voile").classList.add("on");
+  if (S.rejeu) {
+    $("#fenValidation .sous").textContent = "Rejeu d'une séance enregistrée : la validation du décideur va s'afficher.";
+    $("#fenValidation .actions").innerHTML = `<span class="chip rejeu">Rejeu</span>`;
+    $("#complement").readOnly = true; return;
+  }
   $("#btnValider").onclick = () => envoyerValidation("valider");
   $("#btnRecadrer").onclick = () => envoyerValidation("recadrer");
 }
@@ -485,15 +624,18 @@ function fin(e) {
   if (!S.synthese) return toast("La séance s'est terminée sans synthèse.");
   $("#phaseTxt").textContent = "Arbitrage humain";
   rendreDecision(); ouvrirOnglet("decision");
+  if (!S.rejeu) setTimeout(() => chargerRejeux($("#choixRejeu").value), 800);   // la séance devient rejouable
 }
 
 function rendreDecision() {
   const s = S.synthese;
   const lignes = Object.keys(S.avis).map(id => { const a = S.avis[id], r = S.reponses[id];
     return `<tr><td><span style="color:${couleur(id)}">●</span> ${esc(S.config.agents[id].nom)}</td><td>${esc(a.option_preferee)}</td>
-      <td><span class="pos ${a.position}">${POS[a.position]}</span></td><td>${r ? `<span class="pos ${r.position_revisee}">${POS[r.position_revisee]}</span>` : "<span style='color:var(--faint)'>sans objection</span>"}</td></tr>`; }).join("");
+      <td><span class="pos ${a.position}">${POS[a.position]}</span></td><td>${r ? `${esc(r.option_revisee || a.option_preferee)} · <span class="pos ${r.position_revisee}">${POS[r.position_revisee]}</span>` : "<span style='color:var(--faint)'>sans objection</span>"}</td></tr>`; }).join("");
   $("#vue-decision").innerHTML = `
     <div class="reco">${avecRefs(s.recommandation)}</div>
+    ${Object.keys(S.posFin).length ? `<p><a href="#" onclick="ouvrirOnglet('positions');rejouerEvolution();return false" style="color:var(--brass)">Voir comment le débat a fait évoluer les positions →</a></p>` : ""}
+    ${vueCriteres(s)}
     <div class="bloc"><h3>Conditions</h3><ul>${s.conditions.map(c => `<li>${avecRefs(c)}</li>`).join("")}</ul></div>
     <div class="bloc"><h3>Options</h3><div class="opts">${s.options.map(o => `<div class="opt"><b>${esc(o.nom)}</b><div class="cols">
       <div class="pour"><b>Pour</b><ul>${o.pour.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div>
@@ -507,14 +649,160 @@ function rendreDecision() {
     <div class="bloc"><h3>Désaccords persistants</h3><ul>${s.desaccords.map(d => `<li><b>${esc(d.sujet)}</b> : ${avecRefs(d.positions)}</li>`).join("")}</ul></div>
     <div class="bloc"><h3>Hypothèses fragiles</h3><ul>${s.hypotheses_fragiles.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div>
     <div class="bloc"><h3>Informations à obtenir</h3><ul>${s.informations_a_obtenir.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div>
-    <div class="bloc"><h3>Votre arbitrage</h3><textarea id="decision" placeholder="La décision que vous retenez, et pourquoi."></textarea>
+    ${S.rejeu ? `<div class="bloc"><h3>Arbitrage du décideur</h3><p>${S.rejeu.decision_humaine ? esc(S.rejeu.decision_humaine) : "<span style='color:var(--faint)'>Aucune décision enregistrée lors de cette séance.</span>"}</p>
+      <div class="actions"><a class="btn sec" style="text-decoration:none" href="/api/dossiers/${encodeURIComponent(S.rejeu.dossier)}/rejeux/${encodeURIComponent(S.rejeu.id)}/compte-rendu.md">Télécharger le compte rendu</a></div></div>`
+    : `<div class="bloc"><h3>Votre arbitrage</h3><textarea id="decision" placeholder="La décision que vous retenez, et pourquoi."></textarea>
       <div class="actions"><button class="btn" id="btnDecision">Enregistrer la décision</button>
-      <a class="btn sec" style="text-decoration:none" href="/api/seances/${S.seance}/compte-rendu.md">Télécharger le compte rendu</a></div></div>`;
+      <a class="btn sec" style="text-decoration:none" href="/api/seances/${S.seance}/compte-rendu.md">Télécharger le compte rendu</a></div></div>`}`;
+  if (S.rejeu) return;
   $("#btnDecision").onclick = async () => {
     const texte = $("#decision").value.trim(); if (!texte) return $("#decision").focus();
     await fetch(`/api/seances/${S.seance}/decision`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({texte})});
     $("#btnDecision").textContent = "Décision enregistrée ✓";
   };
+}
+
+// ------------------------------------------------------------------ carte des positions
+// Chaque expert est un point : colonne = option préférée, hauteur = position. Après la contradiction,
+// les points glissent vers leur option et leur position révisées.
+function couloirs() {
+  const options = (S.cadrage?.options || []).map(o => ({id: String(o.id), nom: o.nom}));
+  const vus = [...Object.values(S.posInit), ...Object.values(S.posFin)].map(p => couloirDe(p.opt, options));
+  if (vus.includes("?")) options.push({id: "?", nom: "Autre ou non précisée"});
+  return options;
+}
+
+function couloirDe(valeur, options) {
+  const v = String(valeur ?? "").toUpperCase().trim();
+  const o = options.find(o => v === o.id.toUpperCase() ||
+    new RegExp(`(^|[^A-Z0-9])${o.id.toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^A-Z0-9]|$)`).test(v));
+  return o ? o.id : "?";
+}
+
+function coordonnees(options, positions) {
+  const n = options.length, cases = {}, res = {};
+  const ordre = S.config.experts.filter(id => positions[id]);
+  for (const id of ordre) {
+    const p = positions[id];
+    const i = Math.max(0, options.findIndex(o => o.id === couloirDe(p.opt, options)));
+    const j = Math.max(0, NIVEAUX.indexOf(p.pos));
+    (cases[i + "|" + j] ||= []).push(id);
+    res[id] = {i, j};
+  }
+  for (const [cle, ids] of Object.entries(cases)) {
+    const [i, j] = cle.split("|").map(Number);
+    ids.forEach((id, k) => {
+      res[id] = {x: 19 + (i + 0.5) * (79 / n) + (k - (ids.length - 1) / 2) * Math.min(8, 60 / n / ids.length), y: 12 + j * 20};
+    });
+  }
+  return res;
+}
+
+function rendreArene(final) {
+  if (!Object.keys(S.posInit).length) return;
+  const options = couloirs();
+  const vue = $("#vue-positions");
+  let arene = vue.querySelector(".arene");
+  const signature = options.map(o => o.id).join(",");
+  if (!arene || arene.dataset.options !== signature) {
+    vue.innerHTML = `<p class="recit" style="margin-top:0">Chaque point est un membre du COMEX : la colonne indique l'option qu'il préfère, la hauteur sa position.</p>
+      <div class="arene" data-options="${esc(signature)}">
+        ${NIVEAUX.map((n, j) => `<div class="niveau" style="top:${12 + j * 20}%"><span>${NIVEAUX_COURTS[n]}</span></div>`).join("")}
+        ${options.map((o, i) => `<div class="couloir" style="left:${19 + i * (79 / options.length)}%"></div>
+          <div class="nom-couloir" style="left:${19 + (i + 0.5) * (79 / options.length)}%"><b>${esc(o.id)}</b>${esc(o.nom)}</div>`).join("")}
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="recit" id="recit"></div>
+      <div class="actions" id="actionsArene"></div>`;
+    arene = vue.querySelector(".arene");
+  }
+  const positions = final ? {...S.posInit, ...S.posFin} : S.posInit;
+  const xy = coordonnees(options, positions), depart = coordonnees(options, S.posInit);
+  for (const id of Object.keys(positions)) {
+    let p = arene.querySelector(`[data-agent="${id}"]`);
+    if (!p) {
+      p = document.createElement("div");
+      p.className = "point"; p.dataset.agent = id;
+      p.style.setProperty("--c", couleur(id));
+      p.textContent = S.config.agents[id].initiales;
+      p.title = S.config.agents[id].titre;
+      p.style.left = xy[id].x + "%"; p.style.top = xy[id].y + "%";
+      arene.appendChild(p);
+      requestAnimationFrame(() => p.classList.add("visible"));
+    }
+    p.style.left = xy[id].x + "%"; p.style.top = xy[id].y + "%";
+    const bouge = final && S.posFin[id] && (depart[id].x !== xy[id].x || depart[id].y !== xy[id].y);
+    p.classList.toggle("bouge", !!bouge);
+  }
+  arene.classList.toggle("final", final);
+  // Trajectoires : de la position initiale vers la position révisée
+  arene.querySelector("svg").innerHTML = final ? Object.keys(S.posFin).filter(id => depart[id] && xy[id] &&
+    (depart[id].x !== xy[id].x || depart[id].y !== xy[id].y)).map(id => {
+      const a = depart[id], b = xy[id];
+      return `<path d="M${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${Math.min(a.y, b.y) - 9} ${b.x} ${b.y}" vector-effect="non-scaling-stroke"/>`;
+    }).join("") : "";
+  $("#recit").innerHTML = recitPositions(options);
+  $("#nPositions").textContent = Object.keys(S.posInit).length;
+  $("#actionsArene").innerHTML = Object.keys(S.posFin).length
+    ? `<button class="btn sec" onclick="rejouerEvolution()">Rejouer l'évolution</button>` : "";
+}
+
+function recitPositions(options) {
+  const compte = positions => {
+    const c = {};
+    Object.values(positions).forEach(p => { const o = couloirDe(p.opt, options); c[o] = (c[o] || 0) + 1; });
+    return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([o, n]) => `<b>${n}</b> pour ${esc(o === "?" ? "une autre option" : o)}`).join(", ");
+  };
+  let texte = `Avant la contradiction : ${compte(S.posInit)}.`;
+  const fin = {...S.posInit, ...S.posFin};
+  const evolutions = Object.keys(S.posFin).filter(id => S.posInit[id] &&
+    (couloirDe(S.posInit[id].opt, options) !== couloirDe(S.posFin[id].opt, options) || S.posInit[id].pos !== S.posFin[id].pos));
+  if (Object.keys(S.posFin).length) {
+    texte += `<br>Après : ${compte(fin)}.<br>Le débat a fait évoluer <b>${evolutions.length}</b> position${evolutions.length > 1 ? "s" : ""} sur ${Object.keys(S.posInit).length}`
+      + (evolutions.length ? ` (${evolutions.map(nomAgent).join(", ")}).` : ".");
+  }
+  return texte + `<br><span style="color:var(--faint);font-size:12px">Un nombre d'avis n'est pas une preuve : la recommandation repose sur les arguments sourcés.</span>`;
+}
+
+async function rejouerEvolution() {
+  const arene = $("#vue-positions .arene"); if (!arene) return;
+  arene.classList.add("sans-transition");
+  rendreArene(false);
+  void arene.offsetWidth;                        // applique l'état initial sans animation
+  arene.classList.remove("sans-transition");
+  await pause(700);
+  rendreArene(true);
+}
+
+// ------------------------------------------------------------------ vue d'ensemble des critères
+function vueCriteres(s) {
+  const options = (s.options || []).map((o, oi) => ({...o, oi})).filter(o => o.criteres?.length);
+  if (!options.length) return "";
+  const criteres = [...new Set([...(S.cadrage?.criteres || []), ...options.flatMap(o => o.criteres.map(c => c.critere))])]
+    .filter(c => options.some(o => o.criteres.some(x => x.critere === c)));
+  let total = 0, inconnus = 0;
+  const lignes = criteres.map(c => `<div class="crit">${esc(c)}</div>` + options.map(o => {
+    const k = o.criteres.findIndex(x => x.critere === c);
+    if (k < 0) return "<div></div>";
+    const ev = o.criteres[k].evaluation; total++; if (ev === "inconnu") inconnus++;
+    return `<button type="button" class="cellule ev-${esc(ev)}" data-o="${o.oi}" data-c="${k}" title="Voir la justification">${esc(EVALUATIONS[ev] || ev)}</button>`;
+  }).join("")).join("");
+  return `<div class="bloc"><h3>Vue d'ensemble des critères</h3>
+    <div class="chaleur" style="grid-template-columns:minmax(110px,1.4fr) repeat(${options.length},1fr)">
+      <div></div>${options.map(o => `<div class="tete">${esc(o.nom)}</div>`).join("")}${lignes}</div>
+    <p class="recit">${inconnus ? `<b>${inconnus}</b> évaluation${inconnus > 1 ? "s" : ""} sur ${total} reste${inconnus > 1 ? "nt" : ""} à documenter : c'est ce que personne ne sait encore.` : "Toutes les évaluations sont étayées par le dossier."} Cliquez sur une case pour voir la justification et ses sources.</p></div>`;
+}
+
+function voirCritere(oi, ci) {
+  const o = S.synthese?.options?.[oi], c = o?.criteres?.[ci]; if (!c) return;
+  sourceRequete++;
+  sourceRetour = document.activeElement;
+  $("#popContenu").innerHTML = `<div class="source-tete"><b>${esc(o.nom)}</b><button type="button" class="btn sec" data-fermer-source>Fermer</button></div>
+    <h2 style="margin-top:12px">${esc(c.critere)}</h2>
+    <p><span class="cellule ev-${esc(c.evaluation)}" style="display:inline-block;cursor:default;padding:4px 10px">${esc(EVALUATIONS[c.evaluation] || c.evaluation)}</span></p>
+    <p>${avecRefs(c.justification)}</p>${c.sources?.length ? sourcesRefs(c.sources) : `<p class="sous">Aucune source : évaluation à documenter.</p>`}`;
+  $("#pop").classList.add("on");
+  $("#pop [data-fermer-source]").focus();
 }
 
 // ------------------------------------------------------------------ utilitaires
