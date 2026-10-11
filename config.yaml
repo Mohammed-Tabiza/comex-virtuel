@@ -41,6 +41,8 @@ agents:
   rh:           { modele: gemma, thinking: false }
 
 protocole:
+  # La comparaison détaillée des options nécessite une réponse plus longue.
+  synthese_max_tokens: 6144
   # Taille maximale du dossier (en tokens estimés) avant avertissement
   budget_dossier_tokens: 15000
   # json_schema : sortie contrainte par vLLM (recommandé)

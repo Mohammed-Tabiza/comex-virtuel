@@ -61,6 +61,14 @@ Pour revenir à la simulation, définissez `$env:COMEX_MODE = "simulation"` puis
 
 Chaque contribution est attribuée, horodatée, liée au modèle qui l'a produite, et jamais réécrite.
 Les références citées (`[D1-§2]`) sont vérifiées : une référence inventée apparaît barrée en rouge.
+Les références dans le débat, le dossier et la synthèse ouvrent le passage cité avec son
+document et son fichier d'origine. La fenêtre se ferme avec **Fermer**, Échap ou un clic à l'extérieur.
+
+L'onglet **Décision** compare chaque option selon les critères du cadrage et distingue
+les preuves documentées, les objections et les incertitudes. Les mêmes éléments figurent
+dans le compte rendu Markdown. Une citation existante n'atteste pas à elle seule la validité
+d'une affirmation : le passage reste à vérifier. `protocole.synthese_max_tokens` fixe le budget
+de réponse de la synthèse détaillée (6 144 tokens par défaut).
 
 ## Créer un nouveau dossier
 

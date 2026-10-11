@@ -198,6 +198,47 @@ SYNTHESE = {
                                "Réponse de l'éditeur sur un support intégralement UE", "Coût d'un prestataire d'exploitation"],
 }
 
+_COMPARAISON = [
+    {
+        "criteres": [
+            {"critere": "Valeur démontrée", "evaluation": "inconnu", "justification": "Les gains du pilote sont déclaratifs, sans mesure objective.", "sources": ["D1-§3"]},
+            {"critere": "Conformité contractuelle et réglementaire", "evaluation": "mitige", "justification": "L'hébergement interne respecte les engagements, mais la prévention des saisies sensibles doit être renforcée.", "sources": ["D3-§3"]},
+            {"critere": "Capacité d'exécution en 2027", "evaluation": "mitige", "justification": "Le départ d'un exploitant fragilise la capacité d'exécution.", "sources": ["D4-§3"]},
+            {"critere": "Coût complet sur 4 ans", "evaluation": "mitige", "justification": "Le coût annuel complet estimé est de 1,03 M€ ; la valeur correspondante reste à établir.", "sources": ["D2-§1"]},
+            {"critere": "Acceptabilité sociale", "evaluation": "inconnu", "justification": "La consultation et la formation restent à organiser.", "sources": ["D4-§2", "D4-§4"]},
+        ],
+        "preuves": [_arg("L'investissement prévu est de 1,9 M€.", "D2-§1"), _arg("Les gains mesurés par enquête sont déclaratifs.", "D1-§3")],
+        "objections": ["O2 : l'avantage commercial allégué n'est pas documenté ; Stratégie retire cet argument comme fait établi.", "O4 : la qualité exige une relecture ciblée, à mesurer avant généralisation."],
+        "incertitudes": ["Adoption hors volontaires et gains objectifs.", "Résultat de la consultation et disponibilité des compétences."],
+    },
+    {
+        "criteres": [
+            {"critere": "Valeur démontrée", "evaluation": "inconnu", "justification": "Aucun gain propre à l'offre SaaS n'est documenté.", "sources": []},
+            {"critere": "Conformité contractuelle et réglementaire", "evaluation": "defavorable", "justification": "Le support hors UE rend l'offre incompatible avec les engagements en l'état.", "sources": ["D3-§1", "D3-§2"]},
+            {"critere": "Capacité d'exécution en 2027", "evaluation": "inconnu", "justification": "Le calendrier de migration n'est pas établi dans le dossier.", "sources": []},
+            {"critere": "Coût complet sur 4 ans", "evaluation": "inconnu", "justification": "Le prix annuel et les frais initiaux sont connus, mais pas le coût complet sur quatre ans.", "sources": ["D2-§2"]},
+            {"critere": "Acceptabilité sociale", "evaluation": "inconnu", "justification": "La consultation reste nécessaire avant généralisation.", "sources": ["D4-§2"]},
+        ],
+        "preuves": [_arg("Le prix catalogue annuel est de 864 k€ pour 2 400 utilisateurs.", "D2-§2"), _arg("Le support de niveau 2 peut accéder aux données depuis un pays tiers.", "D3-§2")],
+        "objections": ["La conformité bloque cette option en l'état ; aucune garantie contractuelle nouvelle n'est documentée."],
+        "incertitudes": ["Issue d'une renégociation du support et des garanties contractuelles.", "Coût et calendrier de migration."],
+    },
+    {
+        "criteres": [
+            {"critere": "Valeur démontrée", "evaluation": "inconnu", "justification": "Le pilote étendu vise à mesurer la valeur ; son résultat n'est pas encore connu.", "sources": ["D1-§3", "D2-§3"]},
+            {"critere": "Conformité contractuelle et réglementaire", "evaluation": "mitige", "justification": "L'hébergement reste interne, avec des mesures de prévention à mettre en place.", "sources": ["D3-§3"]},
+            {"critere": "Capacité d'exécution en 2027", "evaluation": "mitige", "justification": "Le renforcement partiel est prévu, mais la disponibilité des exploitants reste fragile.", "sources": ["D2-§3", "D4-§3"]},
+            {"critere": "Coût complet sur 4 ans", "evaluation": "inconnu", "justification": "Le coût 2027 est de 0,35 M€ ; les décisions et coûts ultérieurs restent ouverts.", "sources": ["D2-§3"]},
+            {"critere": "Acceptabilité sociale", "evaluation": "inconnu", "justification": "L'extension doit intégrer le dialogue social et la formation.", "sources": ["D4-§2", "D4-§4"]},
+        ],
+        "preuves": [_arg("L'extension prévoit environ 600 utilisateurs et un coût 2027 de 0,35 M€.", "D0-§4", "D2-§3")],
+        "objections": ["O1 : le gain de productivité doit être mesuré objectivement, comme Finance le concède.", "O3 : Opérations maintient la nécessité d'un test de charge avant extension.", "O5 : RH reconnaît la nécessité de consulter le CSE."],
+        "incertitudes": ["Résultats du test de charge et du groupe témoin.", "Capacité du pilote à réduire les inconnues avant le prochain arbitrage."],
+    },
+]
+for _option, _details in zip(SYNTHESE["options"], _COMPARAISON):
+    _option.update(_details)
+
 REFLEXIONS = {
     "cadrage": "Je relis la question posée et la décision attendue. Trois options sont décrites dans le dossier. Les contraintes non négociables portent sur la localisation des données, l'enveloppe et le CSE. Plusieurs inconnues sont listées par le dossier lui-même…",
     "avis": "Je reprends le cadrage validé et les sections qui concernent mon mandat. Je vérifie les chiffres cités, je sépare ce que le dossier établit de ce qu'il suppose, puis je construis ma position…",

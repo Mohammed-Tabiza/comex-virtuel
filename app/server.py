@@ -123,10 +123,13 @@ async def dossier_detail(nom: str):
 
 @app.get("/api/dossiers/{nom}/sections/{ref}")
 async def section(nom: str, ref: str):
-    s = charger_dossier(DOSSIERS / Path(nom).name).section(ref)
+    dossier = charger_dossier(DOSSIERS / Path(nom).name)
+    s = dossier.section(ref)
     if not s:
         raise HTTPException(404, "Section inconnue")
-    return {"ref": s.ref, "titre": s.titre, "texte": s.texte}
+    document = next(d for d in dossier.documents if s in d.sections)
+    return {"ref": s.ref, "titre": s.titre, "texte": s.texte,
+            "document": document.titre, "fichier": document.fichier}
 
 
 @app.post("/api/seances")

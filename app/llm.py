@@ -86,8 +86,11 @@ class Modeles:
                 mode = "consigne"
 
     async def _flux(self, client, modele, thinking, etape, messages, mode, on_flux):
+        max_tokens = modele.get("max_tokens", 4096)
+        if etape == "synthese":
+            max_tokens = self.config["protocole"].get("synthese_max_tokens", max_tokens)
         params = dict(model=modele["model"], messages=messages, stream=True,
-                      temperature=modele.get("temperature", 0.6), max_tokens=modele.get("max_tokens", 4096),
+                      temperature=modele.get("temperature", 0.6), max_tokens=max_tokens,
                       stream_options={"include_usage": True})
         if mode == "json_schema":
             params["response_format"] = {"type": "json_schema",

@@ -110,6 +110,13 @@ aside{display:flex;flex-direction:column;min-height:0;background:var(--panel)}
 .carte ul{margin:0;padding-left:18px} .carte li{margin:3px 0}
 .ref{display:inline-block;font:10.5px var(--mono);padding:0 6px;border-radius:5px;background:var(--brass-soft);color:var(--brass);cursor:pointer;border:0;vertical-align:1px}
 .ref.invalide{background:rgba(255,107,107,.15);color:var(--err);text-decoration:line-through}
+.ref:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+.sources{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.comparaison{overflow-x:auto;margin-top:10px}
+.comparaison table{table-layout:fixed;overflow-wrap:anywhere}
+.comparaison th:first-child{width:36%}
+.evaluation{font-weight:600;color:var(--brass)}
+.source-tete{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .obj{display:flex;gap:8px;margin-top:7px}
 .obj .id{font:600 11px var(--mono);color:var(--mistral);flex:none;padding-top:1px}
 .att{font-size:10.5px;font-weight:600;border-radius:999px;padding:0 7px;border:1px solid currentColor}
@@ -215,7 +222,7 @@ textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--
   </main>
 </div>
 
-<div class="pop" id="pop"><div class="fenetre" id="popContenu"></div></div>
+<div class="pop" id="pop" role="dialog" aria-modal="true" aria-label="Passage cité" tabindex="-1"><div class="fenetre" id="popContenu"></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -234,7 +241,10 @@ const S = {config:null, seance:null, dossier:null, source:null, agents:{}, contr
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const avecRefs = s => esc(s).replace(/\[?(D\d+-§\d+)\]?/g, (_, r) => chipRef(r));
-const chipRef = r => `<button class="ref ${S.refsValides.size && !S.refsValides.has(r) ? "invalide" : ""}" data-ref="${r}" title="${S.refsValides.has(r) ? "Voir la section" : "Référence introuvable dans le dossier"}">${r}</button>`;
+const chipRef = r => `<button type="button" class="ref ${S.refsValides.size && !S.refsValides.has(r) ? "invalide" : ""}" data-ref="${esc(r)}" data-dossier="${esc(S.dossier?.nom)}" title="${S.refsValides.has(r) ? "Voir la section" : "Référence introuvable dans le dossier"}">${esc(r)}</button>`;
+const sourcesRefs = refs => `<div class="sources">${[...new Set(refs || [])].map(r => avecRefs(r)).join(" ")}</div>`;
+const argumentSource = a => avecRefs(a.texte) + sourcesRefs(a.sources);
+const EVALUATIONS = {favorable:"Favorable", mitige:"Mitigé", defavorable:"Défavorable", inconnu:"À documenter"};
 const liste = (titre, items, f = avecRefs) => items && items.length ? `<h4>${titre}</h4><ul>${items.map(i => `<li>${f(i)}</li>`).join("")}</ul>` : "";
 const couleur = id => COULEURS[S.config.agents[id].modele] || "var(--brass)";
 const nomAgent = id => S.config.agents[id]?.nom || id;
@@ -258,8 +268,18 @@ async function init() {
 
   creerSieges();
   document.querySelectorAll(".onglet").forEach(b => b.onclick = () => ouvrirOnglet(b.dataset.vue));
-  document.addEventListener("click", e => { const r = e.target.closest(".ref"); if (r) voirSection(r.dataset.ref); });
-  $("#pop").onclick = e => { if (e.target.id === "pop") $("#pop").classList.remove("on"); };
+  document.addEventListener("click", e => { const r = e.target.closest(".ref[data-ref]"); if (r) voirSection(r.dataset.ref, r.dataset.dossier); });
+  $("#pop").onclick = e => { if (e.target.id === "pop" || e.target.closest("[data-fermer-source]")) fermerSection(); };
+  document.addEventListener("keydown", e => {
+    if (!$("#pop").classList.contains("on")) return;
+    if (e.key === "Escape") { e.preventDefault(); fermerSection(); }
+    if (e.key === "Tab") {
+      const boutons = [...$("#pop").querySelectorAll("button")];
+      if (!boutons.length) { e.preventDefault(); return; }
+      if (e.shiftKey && document.activeElement === boutons[0]) { e.preventDefault(); boutons.at(-1).focus(); }
+      else if (!e.shiftKey && document.activeElement === boutons.at(-1)) { e.preventDefault(); boutons[0].focus(); }
+    }
+  });
   window.addEventListener("resize", dessinerLiens);
   if (dossiers.length) chargerDossier();
 }
@@ -289,7 +309,7 @@ async function chargerDossier() {
   S.dossier = d;
   S.refsValides = new Set(d.documents.flatMap(doc => doc.sections.map(s => s.ref)));
   majTokens(d.tokens_estimes, S.config.budget_dossier_tokens);
-  $("#vue-dossier").innerHTML = `<div class="note">Le dossier complet est placé en tête du prompt de chaque agent, à l'identique, ce qui permet à vLLM de le mettre en cache. Cliquez sur une référence pour lire la section.</div>` +
+  $("#vue-dossier").innerHTML = `<div class="note">Chaque agent analyse le même dossier. Cliquez sur une référence pour lire le passage cité.</div>` +
     d.documents.map(doc => `<div class="doc"><b>${doc.id} · ${esc(doc.titre)}</b><div style="font-size:11px;color:var(--faint)">${esc(doc.fichier)}</div>
       ${doc.sections.map(s => `<div class="sec">${chipRef(s.ref)}<span>${esc(s.titre)}</span></div>`).join("")}</div>`).join("");
 }
@@ -309,8 +329,9 @@ async function lancer() {
   $("#vue-decision").innerHTML = `<div class="vide">Le dossier de décision sera disponible<br>à la fin de la séance.</div>`;
   $("#question").textContent = "Ouverture de la séance…";
   $("#btnLancer").disabled = true;
+  $("#choixDossier").disabled = true;
   const r = await fetch("/api/seances", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({dossier: $("#choixDossier").value})});
-  if (!r.ok) { toast("Impossible d'ouvrir la séance"); $("#btnLancer").disabled = false; return; }
+  if (!r.ok) { toast("Impossible d'ouvrir la séance"); $("#btnLancer").disabled = false; $("#choixDossier").disabled = false; return; }
   S.seance = (await r.json()).seance_id;
   clearInterval(S.timer); const debut = Date.now();
   S.timer = setInterval(() => { const s = Math.floor((Date.now() - debut) / 1000); $("#chipChrono").textContent = `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; }, 500);
@@ -331,7 +352,7 @@ function traiter(e) {
       note(e.action === "valider" ? "Cadrage validé par le décideur. Les analyses indépendantes démarrent." : "Nouveau cadrage demandé par le décideur.", e.complement); break;
     case "seance_terminee": fin(e); break;
     case "decision_enregistree": note("Décision humaine enregistrée dans le compte rendu."); break;
-    case "erreur": toast(e.message); $("#btnLancer").disabled = false; clearInterval(S.timer); break;
+    case "erreur": toast(e.message); $("#btnLancer").disabled = false; $("#choixDossier").disabled = false; clearInterval(S.timer); break;
   }
 }
 
@@ -381,15 +402,15 @@ function contribution(e) {
     el.querySelector(".s-bas").innerHTML = `<span class="pos ${c.position}">${POS[c.position]}</span><span>Option ${esc(c.option_preferee)}</span><span>${e.meta.sources.length} sources</span>`;
     corps = `<div class="c-tete" style="margin-top:6px"><span class="pos ${c.position}">${POS[c.position]}</span><span style="font-size:12px;color:var(--muted)">Option ${esc(c.option_preferee)} · confiance ${"●".repeat(c.confiance)}${"○".repeat(5 - c.confiance)}</span></div>
       <p>${avecRefs(c.resume)}</p><details><summary>Arguments, hypothèses et inconnues</summary>
-      ${liste("Arguments", c.arguments, a => avecRefs(a.texte))}${liste("Hypothèses", c.hypotheses)}${liste("Risques", c.risques)}
+      ${liste("Arguments", c.arguments, argumentSource)}${liste("Hypothèses", c.hypotheses)}${liste("Risques", c.risques)}
       ${liste("Ce que j'ignore", c.inconnues)}${liste("Ce qui me ferait changer d'avis", c.conditions_changement)}</details>`;
   } else if (e.etape === "contre_analyse") {
     corps = `<p>${avecRefs(c.resume)}</p><details open><summary>Hypothèses fragiles et scénarios d'échec</summary>
-      ${liste("Hypothèses fragiles", c.hypotheses_fragiles, a => avecRefs(a.texte))}${liste("Scénarios d'échec", c.scenarios_echec)}${liste("Angles morts", c.angles_morts)}</details>`;
+      ${liste("Hypothèses fragiles", c.hypotheses_fragiles, argumentSource)}${liste("Scénarios d'échec", c.scenarios_echec)}${liste("Angles morts", c.angles_morts)}</details>`;
   } else if (e.etape === "objections") {
     S.objections = c.objections; phase("reponses");
     S.liens = c.objections.map(o => o.cible); dessinerLiens();
-    corps = c.objections.map(o => `<div class="obj"><span class="id">${esc(o.id)}</span><div><b>→ ${esc(nomAgent(o.cible))}</b> ${avecRefs(o.texte)}</div></div>`).join("");
+    corps = c.objections.map(o => `<div class="obj"><span class="id">${esc(o.id)}</span><div><b>→ ${esc(nomAgent(o.cible))}</b> ${argumentSource(o)}</div></div>`).join("");
   } else if (e.etape === "reponse") {
     S.reponses[id] = c;
     if (S.avis[id]) el.querySelector(".s-bas").innerHTML = `<span class="pos ${S.avis[id].position}" style="opacity:.55">${POS[S.avis[id].position]}</span>→<span class="pos ${c.position_revisee}">${POS[c.position_revisee]}</span>`;
@@ -458,6 +479,7 @@ async function envoyerValidation(action) {
 // ------------------------------------------------------------------ fin de séance et décision
 function fin(e) {
   clearInterval(S.timer); $("#btnLancer").disabled = false;
+  $("#choixDossier").disabled = false;
   document.querySelectorAll(".siege").forEach(s => s.classList.remove("actif"));
   if (e.erreurs?.length) note("Incidents pendant la séance : " + e.erreurs.join(" ; "));
   if (!S.synthese) return toast("La séance s'est terminée sans synthèse.");
@@ -475,7 +497,11 @@ function rendreDecision() {
     <div class="bloc"><h3>Conditions</h3><ul>${s.conditions.map(c => `<li>${avecRefs(c)}</li>`).join("")}</ul></div>
     <div class="bloc"><h3>Options</h3><div class="opts">${s.options.map(o => `<div class="opt"><b>${esc(o.nom)}</b><div class="cols">
       <div class="pour"><b>Pour</b><ul>${o.pour.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div>
-      <div class="contre"><b>Contre</b><ul>${o.contre.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div></div></div>`).join("")}</div></div>
+      <div class="contre"><b>Contre</b><ul>${o.contre.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div></div>
+      ${o.criteres?.length ? `<div class="comparaison"><table class="matrice"><caption>Évaluation des critères</caption><thead><tr><th scope="col">Critère</th><th scope="col">Évaluation et justification</th></tr></thead><tbody>${o.criteres.map(c => `<tr><th scope="row">${esc(c.critere)}</th><td><span class="evaluation">${esc(EVALUATIONS[c.evaluation] || c.evaluation)}</span><br>${avecRefs(c.justification)}${sourcesRefs(c.sources)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${liste("Preuves documentées", o.preuves, argumentSource)}
+      ${liste("Objections", o.objections)}${liste("Incertitudes", o.incertitudes)}</div>`).join("")}</div>
+      <p class="note">Les preuves renvoient au dossier ; les évaluations restent des analyses à vérifier. Le nombre d'avis favorables ne constitue pas une preuve.</p></div>
     <div class="bloc"><h3>Positions des membres</h3><table class="matrice"><tr><th>Membre</th><th>Option</th><th>Initiale</th><th>Après contradiction</th></tr>${lignes}</table></div>
     <div class="bloc"><h3>Accords</h3><ul>${s.accords.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div>
     <div class="bloc"><h3>Désaccords persistants</h3><ul>${s.desaccords.map(d => `<li><b>${esc(d.sujet)}</b> : ${avecRefs(d.positions)}</li>`).join("")}</ul></div>
@@ -497,12 +523,35 @@ function ouvrirOnglet(v) {
   document.querySelectorAll(".vue").forEach(x => x.classList.toggle("on", x.id === "vue-" + v));
 }
 
-async function voirSection(ref) {
-  if (!S.dossier) return;
-  const r = await fetch(`/api/dossiers/${encodeURIComponent(S.dossier.nom)}/sections/${encodeURIComponent(ref)}`);
-  $("#popContenu").innerHTML = r.ok ? (s => `<span class="ref">${esc(s.ref)}</span><h2 style="margin-top:6px">${esc(s.titre)}</h2><pre>${esc(s.texte)}</pre>`)(await r.json())
-    : `<h2>${esc(ref)}</h2><p style="color:var(--err)">Cette référence n'existe pas dans le dossier : l'agent l'a probablement inventée.</p>`;
+let sourceRetour = null, sourceRequete = 0;
+function fermerSection() {
+  sourceRequete++;
+  $("#pop").classList.remove("on");
+  if (sourceRetour?.isConnected) sourceRetour.focus();
+}
+async function voirSection(ref, nom = S.dossier?.nom) {
+  if (!ref || !nom) return;
+  const requete = ++sourceRequete;
+  sourceRetour = document.activeElement;
+  const tete = `<div class="source-tete"><b>${esc(ref)}</b><button type="button" class="btn sec" data-fermer-source>Fermer</button></div>`;
+  $("#popContenu").innerHTML = tete + '<p role="status">Chargement du passage…</p>';
   $("#pop").classList.add("on");
+  $("#pop [data-fermer-source]").focus();
+  try {
+    const r = await fetch(`/api/dossiers/${encodeURIComponent(nom)}/sections/${encodeURIComponent(ref)}`);
+    if (requete !== sourceRequete) return;
+    if (!r.ok) {
+      $("#popContenu").innerHTML = tete + `<p role="alert">${r.status === 404 ? "Cette référence n'existe pas dans le dossier. Elle ne peut pas étayer l'analyse." : "Impossible de charger le passage. Réessayez."}</p>`;
+    } else {
+      const s = await r.json();
+      if (requete !== sourceRequete) return;
+      $("#popContenu").innerHTML = tete + `<h2 style="margin-top:12px">${esc(s.titre)}</h2><div class="sous">${esc(s.document)} · ${esc(s.fichier)}</div><pre>${esc(s.texte)}</pre>`;
+    }
+  } catch {
+    if (requete !== sourceRequete) return;
+    $("#popContenu").innerHTML = tete + '<p role="alert">Connexion indisponible. Réessayez pour lire le passage.</p>';
+  }
+  $("#pop [data-fermer-source]").focus();
 }
 
 function toast(m) { const t = $("#toast"); t.textContent = m; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 6000); }

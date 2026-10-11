@@ -29,6 +29,18 @@ def compte_rendu(seance, etat: dict) -> str:
         l.append(f"| {AGENTS[agent]['titre']} | {avis['_meta']['libelle']} | {avis.get('option_preferee', '')} | "
                  f"{POSITIONS.get(avis.get('position'), '')} | {POSITIONS.get(rep.get('position_revisee'), '-')} |")
 
+    l += ["", "## Comparaison des options"]
+    for option in syn.get("options", []):
+        l += ["", f"### {option['nom']}", "", "#### Arguments pour", _liste(option.get("pour")),
+              "", "#### Arguments contre", _liste(option.get("contre")), "", "#### Critères de décision"]
+        for critere in option.get("criteres", []):
+            sources = " ".join(f"[{r}]" for r in critere.get("sources", []))
+            l.append(f"- **{critere['critere']} — {critere['evaluation']}** : {critere['justification']} {sources}")
+        l += ["", "#### Preuves documentées"]
+        l += [f"- {p['texte']} " + " ".join(f"[{r}]" for r in p.get("sources", []))
+              for p in option.get("preuves", [])] or ["- (aucune preuve fournie)"]
+        l += ["", "#### Objections", _liste(option.get("objections")),
+              "", "#### Incertitudes", _liste(option.get("incertitudes"))]
     l += ["", "## Accords", _liste(syn.get("accords")), "", "## Désaccords persistants"]
     l += [f"- **{d['sujet']}** : {d['positions']}" for d in syn.get("desaccords", [])] or ["- (aucun)"]
     l += ["", "## Hypothèses fragiles", _liste(syn.get("hypotheses_fragiles")), "",
