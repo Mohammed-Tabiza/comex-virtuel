@@ -1,0 +1,5 @@
+langgraph>=1.0
+fastapi>=0.110
+uvicorn>=0.29
+openai>=1.40
+pyyaml>=6.0

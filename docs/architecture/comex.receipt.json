@@ -1,0 +1,27 @@
+{
+    "diagram_type":  "architecture",
+    "output":  "comex.html",
+    "specification_sha256":  "339c4e30a7698f1612248530bacc3786deaac983ed3309647ea038f079671543",
+    "artifact_sha256":  "ea87c52947a51b9ea5b7d9050e667741d0c4e924b301b93f17894df309994240",
+    "specification_bytes":  10424,
+    "artifact_bytes":  714343,
+    "validation":  "9/9 showcase, 0 errors, 0 warnings",
+    "browser_evidence":  "passed",
+    "visual_review":  "passed",
+    "visual_review_scope":  [
+                                "2048x1320 light screenshot",
+                                "1440x900 dark screenshot"
+                            ],
+    "correction_rounds":  3,
+    "evidence":  [
+                     "app/server.py",
+                     "app/graph.py",
+                     "app/llm.py",
+                     "app/runtime.py",
+                     "app/dossier.py",
+                     "app/rapport.py",
+                     "app/agents.py",
+                     "config.yaml",
+                     "README.md"
+                 ]
+}

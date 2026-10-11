@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COMEX virtuel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0e1116; --panel:#161a21; --panel-2:#1c212a; --line:#2a313c; --line-2:#363f4c;
+  --text:#e8e6e1; --muted:#9aa3ae; --faint:#6b7480;
+  --brass:#c9a25c; --brass-soft:rgba(201,162,92,.16);
+  --qwen:#8b97ff; --qwen14:#3fc7b5; --mistral:#ff8f45;
+  --ok:#5fcf8a; --warn:#f2c14e; --err:#ff6b6b; --think:#b48cff;
+  --fav:#5fcf8a; --favc:#a6d96a; --res:#f2c14e; --def:#ff6b6b;
+  --serif:"Fraunces",Georgia,serif; --sans:"Inter",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:14px/1.5 var(--sans);overflow:hidden}
+button,select,textarea{font:inherit;color:inherit}
+.app{display:grid;grid-template-rows:auto auto 1fr;height:100vh}
+
+/* ---------- en-tête */
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+.marque{font-family:var(--serif);font-size:20px;font-weight:600;letter-spacing:.2px;white-space:nowrap}
+.marque span{color:var(--brass)}
+.ctrl{display:flex;gap:8px;align-items:center;margin-left:8px}
+select{background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:7px 10px;min-width:200px}
+.btn{background:var(--brass);color:#1a1408;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.sec{background:transparent;color:var(--text);border:1px solid var(--line-2)}
+.chips{display:flex;gap:8px;margin-left:auto;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.chip{border:1px solid var(--line-2);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--muted);white-space:nowrap}
+.chip.sim{color:var(--warn);border-color:rgba(242,193,78,.4)}
+.chip.reel{color:var(--ok);border-color:rgba(95,207,138,.4)}
+.chip.alerte{color:var(--err);border-color:rgba(255,107,107,.5)}
+
+/* ---------- étapes */
+.etapes{display:flex;gap:0;padding:10px 20px;border-bottom:1px solid var(--line);overflow-x:auto}
+.etape{display:flex;align-items:center;gap:8px;color:var(--faint);font-size:12.5px;white-space:nowrap}
+.etape .pt{width:9px;height:9px;border-radius:50%;border:1.5px solid currentColor}
+.etape+.etape::before{content:"";width:28px;height:1px;background:var(--line-2);margin:0 10px}
+.etape.fait{color:var(--muted)} .etape.fait .pt{background:var(--muted)}
+.etape.actif{color:var(--brass)} .etape.actif .pt{background:var(--brass);box-shadow:0 0 0 4px var(--brass-soft)}
+
+/* ---------- corps */
+main{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(360px,1fr);min-height:0}
+.salle{position:relative;min-height:0;overflow:hidden;border-right:1px solid var(--line)}
+.table-zone{position:absolute;inset:18px 18px 46px}
+.table{position:absolute;left:19%;right:19%;top:21%;bottom:21%;border-radius:50%;
+  background:radial-gradient(ellipse at 50% 40%,#232c38 0%,#18202a 60%,#121820 100%);
+  border:1px solid rgba(201,162,92,.35);box-shadow:inset 0 0 60px rgba(0,0,0,.45),0 20px 60px rgba(0,0,0,.35);
+  display:flex;align-items:center;justify-content:center;text-align:center;padding:5% 9%}
+.table .q{font-family:var(--serif);font-size:clamp(14px,1.35vw,19px);line-height:1.35;color:#efe7d6}
+.table .ph{margin-top:10px;font-size:11.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--brass)}
+.table .stats{margin-top:8px;font-size:12px;color:var(--muted)}
+svg.liens{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+svg.liens line{stroke:var(--mistral);stroke-width:1.6;stroke-dasharray:6 6;animation:defile 1.2s linear infinite;opacity:.85}
+@keyframes defile{to{stroke-dashoffset:-24}}
+
+.siege{position:absolute;width:200px;z-index:2;transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:10px 11px;transition:border-color .25s,box-shadow .25s,transform .25s,opacity .25s;opacity:.72}
+.siege.actif{opacity:1;border-color:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 22%,transparent),0 12px 30px rgba(0,0,0,.4);transform:translate(-50%,-50%) scale(1.04);z-index:3}
+.siege.termine{opacity:1}
+.siege.erreur{opacity:1;border-color:var(--err)}
+.s-haut{display:flex;gap:9px;align-items:center}
+.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:12px;
+  background:color-mix(in srgb,var(--c) 18%,var(--panel-2));color:var(--c);border:1.5px solid var(--c);flex:none;position:relative}
+.siege.actif .avatar::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--c);animation:pouls 1.4s ease-out infinite}
+@keyframes pouls{from{opacity:.8;transform:scale(.85)}to{opacity:0;transform:scale(1.25)}}
+.s-nom{font-weight:600;font-size:13px;line-height:1.2}
+.s-mod{font-size:11px;color:var(--c)}
+.statut{margin-top:8px;display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted)}
+.statut .d{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+.st-analyse .d{background:var(--warn)} .st-reflexion .d{background:var(--think);animation:clign 1s infinite}
+.st-redaction .d{background:var(--c);animation:clign .6s infinite} .st-termine .d{background:var(--ok)} .st-erreur .d{background:var(--err)}
+@keyframes clign{50%{opacity:.25}}
+.extrait{margin-top:6px;font:11px/1.45 var(--mono);color:var(--muted);height:48px;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;word-break:break-word}
+.extrait.reflexion{color:#c9b6f2;font-style:italic;font-family:var(--sans)}
+.extrait:empty::before{content:"—";color:var(--faint)}
+.s-bas{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--faint)}
+.pos{border-radius:999px;padding:1px 8px;font-size:10.5px;font-weight:600;border:1px solid currentColor}
+.pos.favorable{color:var(--fav)} .pos.favorable_sous_conditions{color:var(--favc)} .pos.reserve{color:var(--res)} .pos.defavorable{color:var(--def)}
+.legende{position:absolute;left:20px;bottom:14px;display:flex;gap:16px;font-size:12px;color:var(--muted)}
+.legende i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:0}
+
+/* ---------- panneau droit */
+aside{display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+.onglets{display:flex;border-bottom:1px solid var(--line)}
+.onglet{flex:1;background:none;border:0;padding:12px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-weight:500}
+.onglet.on{color:var(--text);border-bottom-color:var(--brass)}
+.onglet .n{font-size:11px;color:var(--faint);margin-left:4px}
+.vue{flex:1;overflow-y:auto;padding:14px 16px;display:none}
+.vue.on{display:block}
+.vide{color:var(--faint);text-align:center;margin-top:60px;line-height:1.7}
+
+.carte{border:1px solid var(--line);border-left:3px solid var(--c);border-radius:10px;padding:11px 13px;margin-bottom:10px;background:var(--panel-2);animation:entree .35s ease}
+@keyframes entree{from{opacity:0;transform:translateY(-6px)}}
+.c-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.c-tete b{font-size:13px}
+.c-etape{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.8px}
+.c-meta{margin-left:auto;font-size:11px;color:var(--faint)}
+.carte p{margin:7px 0 0}
+.carte details{margin-top:6px}
+.carte summary{cursor:pointer;color:var(--muted);font-size:12px}
+.carte h4{margin:10px 0 3px;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--faint);font-weight:600}
+.carte ul{margin:0;padding-left:18px} .carte li{margin:3px 0}
+.ref{display:inline-block;font:10.5px var(--mono);padding:0 6px;border-radius:5px;background:var(--brass-soft);color:var(--brass);cursor:pointer;border:0;vertical-align:1px}
+.ref.invalide{background:rgba(255,107,107,.15);color:var(--err);text-decoration:line-through}
+.obj{display:flex;gap:8px;margin-top:7px}
+.obj .id{font:600 11px var(--mono);color:var(--mistral);flex:none;padding-top:1px}
+.att{font-size:10.5px;font-weight:600;border-radius:999px;padding:0 7px;border:1px solid currentColor}
+.att.maintient{color:var(--res)} .att.ajuste{color:var(--qwen14)} .att.concede{color:var(--fav)}
+.note{font-size:12.5px;color:var(--muted);border:1px dashed var(--line-2);border-radius:10px;padding:9px 12px;margin-bottom:10px}
+
+/* dossier */
+.doc{margin-bottom:14px} .doc b{font-size:13px}
+.doc .sec{display:flex;gap:8px;align-items:baseline;margin:4px 0;font-size:12.5px;color:var(--muted)}
+
+/* décision */
+.reco{border:1px solid rgba(201,162,92,.45);background:var(--brass-soft);border-radius:12px;padding:13px 15px;font-family:var(--serif);font-size:15.5px;line-height:1.45}
+.bloc{margin-top:16px}
+.bloc h3{font-size:11.5px;text-transform:uppercase;letter-spacing:1px;color:var(--faint);margin:0 0 6px;font-weight:600}
+.bloc ul{margin:0;padding-left:18px} .bloc li{margin:4px 0}
+.opts{display:grid;gap:8px}
+.opt{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--panel-2)}
+.opt .cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12.5px;margin-top:4px}
+.opt .pour b{color:var(--fav)} .opt .contre b{color:var(--def)}
+table.matrice{width:100%;border-collapse:collapse;font-size:12.5px}
+.matrice td,.matrice th{padding:6px 6px;border-bottom:1px solid var(--line);text-align:left}
+.matrice th{color:var(--faint);font-weight:500;font-size:11.5px}
+textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;resize:vertical}
+.actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+
+/* validation du cadrage */
+.voile{position:absolute;inset:0;background:rgba(8,10,14,.62);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:10;padding:20px}
+.voile.on{display:flex}
+.fenetre{background:var(--panel);border:1px solid var(--line-2);border-radius:14px;max-width:640px;width:100%;max-height:100%;overflow-y:auto;padding:20px 22px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.fenetre h2{font-family:var(--serif);font-weight:600;font-size:20px;margin:0 0 4px}
+.fenetre .sous{color:var(--muted);font-size:13px;margin-bottom:12px}
+.alerte-q{border-left:3px solid var(--warn);padding:6px 10px;background:rgba(242,193,78,.08);border-radius:6px;margin:4px 0}
+
+/* section citée */
+.pop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,10,14,.55);z-index:20;padding:20px}
+.pop.on{display:flex}
+.pop .fenetre{max-width:560px}
+.pop pre{white-space:pre-wrap;font:13px/1.55 var(--sans);color:var(--text);margin:8px 0 0}
+.toast{position:fixed;bottom:18px;right:18px;background:var(--err);color:#fff;padding:10px 14px;border-radius:8px;display:none;z-index:30;max-width:420px}
+
+/* mobile : cartes en liste */
+@media (max-width:980px){
+  body{overflow:auto} .app{height:auto}
+  main{grid-template-columns:1fr}
+  .salle{border-right:0;border-bottom:1px solid var(--line)}
+  .table-zone{position:static;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;padding:14px}
+  .table{position:static;grid-column:1/-1;border-radius:14px;padding:16px}
+  .siege{position:static;transform:none;width:auto}
+  .siege.actif{transform:none}
+  svg.liens{display:none}
+  .legende{position:static;padding:0 16px 14px}
+  aside{min-height:70vh}
+  header{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="marque">COMEX <span>virtuel</span></div>
+    <div class="ctrl">
+      <select id="choixDossier" aria-label="Dossier de séance"></select>
+      <button class="btn" id="btnLancer">Ouvrir la séance</button>
+    </div>
+    <div class="chips">
+      <span class="chip" id="chipTokens">Dossier : —</span>
+      <span class="chip" id="chipChrono">00:00</span>
+      <span class="chip" id="chipMode">—</span>
+    </div>
+  </header>
+
+  <nav class="etapes" id="etapes"></nav>
+
+  <main>
+    <section class="salle">
+      <div class="table-zone" id="zone">
+        <svg class="liens" id="liens" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+        <div class="table">
+          <div>
+            <div class="q" id="question">Choisissez un dossier et ouvrez la séance.</div>
+            <div class="ph" id="phaseTxt">En attente</div>
+            <div class="stats" id="stats"></div>
+          </div>
+        </div>
+      </div>
+      <div class="legende" id="legende"></div>
+
+      <div class="voile" id="voile">
+        <div class="fenetre" id="fenValidation"></div>
+      </div>
+    </section>
+
+    <aside>
+      <div class="onglets">
+        <button class="onglet on" data-vue="debat">Débat en direct<span class="n" id="nDebat"></span></button>
+        <button class="onglet" data-vue="dossier">Dossier</button>
+        <button class="onglet" data-vue="decision">Décision</button>
+      </div>
+      <div class="vue on" id="vue-debat"><div class="vide">Les contributions des membres<br>apparaîtront ici en temps réel.</div></div>
+      <div class="vue" id="vue-dossier"></div>
+      <div class="vue" id="vue-decision"><div class="vide">Le dossier de décision sera disponible<br>à la fin de la séance.</div></div>
+    </aside>
+  </main>
+</div>
+
+<div class="pop" id="pop"><div class="fenetre" id="popContenu"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// Positions des sièges autour de la table (angle en degrés, 0 = droite, 90 = bas)
+const ANGLES = {president:-90, strategie:-38, finance:5, clients:47, contradicteur:90, operations:133, risques:175, rh:-142};
+const RX = 36.5, RY = 41;   // rayons de l'ellipse des sièges, en % de la zone
+const PHASES = [["cadrage","Cadrage"],["validation","Validation humaine"],["analyses","Analyses indépendantes"],
+  ["contradiction","Contradiction"],["reponses","Réponses"],["synthese","Synthèse"],["arbitrage","Arbitrage"]];
+const COULEURS = {qwen27b:"var(--qwen)", qwen14b:"var(--qwen14)", mistral:"var(--mistral)"};
+const ETAPES = {cadrage:"Cadrage", avis:"Avis initial", contre_analyse:"Contre-analyse", objections:"Objections", reponse:"Réponse", synthese:"Synthèse"};
+const POS = {favorable:"Favorable", favorable_sous_conditions:"Favorable s/ conditions", reserve:"Réservé", defavorable:"Défavorable"};
+const STATUTS = {attente:"En attente", analyse:"Lecture du dossier", reflexion:"Réflexion", redaction:"Rédaction", termine:"Terminé", erreur:"Erreur"};
+
+const $ = s => document.querySelector(s);
+const S = {config:null, seance:null, dossier:null, source:null, agents:{}, contributions:0, tokens:0, avis:{}, reponses:{}, objections:[], cadrage:null, synthese:null, refsValides:new Set(), t:0, timer:null, phase:null};
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const avecRefs = s => esc(s).replace(/\[?(D\d+-§\d+)\]?/g, (_, r) => chipRef(r));
+const chipRef = r => `<button class="ref ${S.refsValides.size && !S.refsValides.has(r) ? "invalide" : ""}" data-ref="${r}" title="${S.refsValides.has(r) ? "Voir la section" : "Référence introuvable dans le dossier"}">${r}</button>`;
+const liste = (titre, items, f = avecRefs) => items && items.length ? `<h4>${titre}</h4><ul>${items.map(i => `<li>${f(i)}</li>`).join("")}</ul>` : "";
+const couleur = id => COULEURS[S.config.agents[id].modele] || "var(--brass)";
+const nomAgent = id => S.config.agents[id]?.nom || id;
+
+// ------------------------------------------------------------------ initialisation
+async function init() {
+  S.config = await (await fetch("/api/config")).json();
+  const mode = $("#chipMode");
+  mode.textContent = S.config.mode === "reel" ? "Modèles réels" : "Mode simulation";
+  mode.className = "chip " + (S.config.mode === "reel" ? "reel" : "sim");
+
+  const dossiers = await (await fetch("/api/dossiers")).json();
+  $("#choixDossier").innerHTML = dossiers.map(d => `<option>${esc(d)}</option>`).join("");
+  $("#choixDossier").onchange = chargerDossier;
+  $("#btnLancer").onclick = lancer;
+
+  $("#etapes").innerHTML = PHASES.map(([id, l]) => `<div class="etape" data-ph="${id}"><span class="pt"></span>${l}</div>`).join("");
+  const modeles = {};
+  Object.values(S.config.agents).forEach(a => modeles[a.modele] = a.libelle_modele);
+  $("#legende").innerHTML = Object.entries(modeles).map(([m, l]) => `<span><i style="background:${COULEURS[m] || "var(--brass)"}"></i>${esc(l)}</span>`).join("");
+
+  creerSieges();
+  document.querySelectorAll(".onglet").forEach(b => b.onclick = () => ouvrirOnglet(b.dataset.vue));
+  document.addEventListener("click", e => { const r = e.target.closest(".ref"); if (r) voirSection(r.dataset.ref); });
+  $("#pop").onclick = e => { if (e.target.id === "pop") $("#pop").classList.remove("on"); };
+  window.addEventListener("resize", dessinerLiens);
+  if (dossiers.length) chargerDossier();
+}
+
+function creerSieges() {
+  const zone = $("#zone");
+  zone.querySelectorAll(".siege").forEach(n => n.remove());
+  for (const [id, a] of Object.entries(S.config.agents)) {
+    const ang = ANGLES[id] * Math.PI / 180;
+    const el = document.createElement("div");
+    el.className = "siege"; el.id = "siege-" + id;
+    el.style.left = (50 + RX * Math.cos(ang)) + "%";
+    el.style.top = (50 + RY * Math.sin(ang)) + "%";
+    el.style.setProperty("--c", couleur(id));
+    el.innerHTML = `<div class="s-haut"><div class="avatar">${esc(a.initiales)}</div>
+        <div><div class="s-nom">${esc(a.titre)}</div><div class="s-mod">${esc(a.libelle_modele)}${a.thinking ? " · thinking" : ""}</div></div></div>
+      <div class="statut st-attente"><span class="d"></span><span class="lib">En attente</span></div>
+      <div class="extrait"></div><div class="s-bas"></div>`;
+    zone.appendChild(el);
+    S.agents[id] = {statut: "attente"};
+  }
+}
+
+async function chargerDossier() {
+  const nom = $("#choixDossier").value;
+  const d = await (await fetch(`/api/dossiers/${encodeURIComponent(nom)}`)).json();
+  S.dossier = d;
+  S.refsValides = new Set(d.documents.flatMap(doc => doc.sections.map(s => s.ref)));
+  majTokens(d.tokens_estimes, S.config.budget_dossier_tokens);
+  $("#vue-dossier").innerHTML = `<div class="note">Le dossier complet est placé en tête du prompt de chaque agent, à l'identique, ce qui permet à vLLM de le mettre en cache. Cliquez sur une référence pour lire la section.</div>` +
+    d.documents.map(doc => `<div class="doc"><b>${doc.id} · ${esc(doc.titre)}</b><div style="font-size:11px;color:var(--faint)">${esc(doc.fichier)}</div>
+      ${doc.sections.map(s => `<div class="sec">${chipRef(s.ref)}<span>${esc(s.titre)}</span></div>`).join("")}</div>`).join("");
+}
+
+function majTokens(n, budget) {
+  const c = $("#chipTokens");
+  c.textContent = `Dossier : ~${n.toLocaleString("fr-FR")} / ${budget.toLocaleString("fr-FR")} tokens`;
+  c.className = "chip" + (n > budget ? " alerte" : "");
+}
+
+// ------------------------------------------------------------------ séance
+async function lancer() {
+  if (S.source) S.source.close();
+  Object.assign(S, {avis:{}, reponses:{}, objections:[], cadrage:null, synthese:null, contributions:0, tokens:0, t:0, phase:null});
+  creerSieges(); dessinerLiens();
+  $("#vue-debat").innerHTML = ""; $("#nDebat").textContent = "";
+  $("#vue-decision").innerHTML = `<div class="vide">Le dossier de décision sera disponible<br>à la fin de la séance.</div>`;
+  $("#question").textContent = "Ouverture de la séance…";
+  $("#btnLancer").disabled = true;
+  const r = await fetch("/api/seances", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({dossier: $("#choixDossier").value})});
+  if (!r.ok) { toast("Impossible d'ouvrir la séance"); $("#btnLancer").disabled = false; return; }
+  S.seance = (await r.json()).seance_id;
+  clearInterval(S.timer); const debut = Date.now();
+  S.timer = setInterval(() => { const s = Math.floor((Date.now() - debut) / 1000); $("#chipChrono").textContent = `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; }, 500);
+  S.source = new EventSource(`/api/seances/${S.seance}/evenements`);
+  S.source.onmessage = m => traiter(JSON.parse(m.data));
+}
+
+function traiter(e) {
+  switch (e.type) {
+    case "dossier_charge": majTokens(e.dossier.tokens_estimes, e.budget);
+      if (e.depassement) note("Le dossier dépasse le budget de contexte configuré : les agents servis par les plus petits modèles risquent d'être tronqués."); break;
+    case "phase": phase(e.phase); break;
+    case "agent_statut": statut(e); break;
+    case "agent_flux": flux(e); break;
+    case "contribution": contribution(e); break;
+    case "attente_validation": ouvrirValidation(e.cadrage); break;
+    case "validation_humaine": $("#voile").classList.remove("on");
+      note(e.action === "valider" ? "Cadrage validé par le décideur. Les analyses indépendantes démarrent." : "Nouveau cadrage demandé par le décideur.", e.complement); break;
+    case "seance_terminee": fin(e); break;
+    case "decision_enregistree": note("Décision humaine enregistrée dans le compte rendu."); break;
+    case "erreur": toast(e.message); $("#btnLancer").disabled = false; clearInterval(S.timer); break;
+  }
+}
+
+function phase(p) {
+  S.phase = p;
+  const i = PHASES.findIndex(x => x[0] === p);
+  document.querySelectorAll(".etape").forEach((el, k) => el.className = "etape" + (k < i ? " fait" : k === i ? " actif" : ""));
+  $("#phaseTxt").textContent = PHASES[i]?.[1] || p;
+  if (p !== "contradiction" && p !== "reponses") { S.liens = []; dessinerLiens(); }
+}
+
+function statut(e) {
+  const el = $("#siege-" + e.agent); if (!el) return;
+  S.agents[e.agent].statut = e.statut;
+  el.classList.toggle("actif", ["analyse", "reflexion", "redaction"].includes(e.statut));
+  el.classList.toggle("termine", e.statut === "termine");
+  el.classList.toggle("erreur", e.statut === "erreur");
+  const st = el.querySelector(".statut");
+  st.className = "statut st-" + e.statut;
+  st.querySelector(".lib").textContent = e.statut === "erreur" ? "Erreur" :
+    `${STATUTS[e.statut] || e.statut}${e.libelle && e.statut !== "termine" ? " · " + e.libelle : ""}${e.duree ? ` · ${e.duree} s` : ""}`;
+  if (e.statut === "analyse") { const x = el.querySelector(".extrait"); x.textContent = ""; x.className = "extrait"; }
+  if (e.statut === "erreur") { el.querySelector(".extrait").textContent = e.message || ""; }
+  if (e.statut === "reflexion" || e.statut === "redaction") {
+    const actifs = Object.values(S.agents).filter(a => ["analyse", "reflexion", "redaction"].includes(a.statut)).length;
+    $("#stats").textContent = `${actifs} membre${actifs > 1 ? "s" : ""} en activité · ${S.contributions} contribution${S.contributions > 1 ? "s" : ""}`;
+  }
+}
+
+function flux(e) {
+  const x = $("#siege-" + e.agent)?.querySelector(".extrait"); if (!x) return;
+  x.className = "extrait " + e.nature;
+  x.textContent = e.extrait;   // en rédaction, le serveur n'envoie que les valeurs lisibles du JSON en cours
+}
+
+function contribution(e) {
+  S.contributions++; S.tokens += (e.meta.tokens_sortie || 0);
+  $("#nDebat").textContent = S.contributions;
+  $("#stats").textContent = `${S.contributions} contribution${S.contributions > 1 ? "s" : ""} · ${S.tokens.toLocaleString("fr-FR")} tokens produits`;
+  const c = e.contenu, id = e.agent, el = $("#siege-" + id);
+  let corps = "";
+  if (e.etape === "cadrage") {
+    S.cadrage = c; $("#question").textContent = c.question_reformulee;
+    corps = `<p>${avecRefs(c.question_reformulee)}</p>${liste("Options", c.options, o => `<b>${esc(o.id)}</b> · ${esc(o.nom)} : ${avecRefs(o.description)}`)}${liste("Critères", c.criteres)}`;
+  } else if (e.etape === "avis") {
+    S.avis[id] = c;
+    el.querySelector(".s-bas").innerHTML = `<span class="pos ${c.position}">${POS[c.position]}</span><span>Option ${esc(c.option_preferee)}</span><span>${e.meta.sources.length} sources</span>`;
+    corps = `<div class="c-tete" style="margin-top:6px"><span class="pos ${c.position}">${POS[c.position]}</span><span style="font-size:12px;color:var(--muted)">Option ${esc(c.option_preferee)} · confiance ${"●".repeat(c.confiance)}${"○".repeat(5 - c.confiance)}</span></div>
+      <p>${avecRefs(c.resume)}</p><details><summary>Arguments, hypothèses et inconnues</summary>
+      ${liste("Arguments", c.arguments, a => avecRefs(a.texte))}${liste("Hypothèses", c.hypotheses)}${liste("Risques", c.risques)}
+      ${liste("Ce que j'ignore", c.inconnues)}${liste("Ce qui me ferait changer d'avis", c.conditions_changement)}</details>`;
+  } else if (e.etape === "contre_analyse") {
+    corps = `<p>${avecRefs(c.resume)}</p><details open><summary>Hypothèses fragiles et scénarios d'échec</summary>
+      ${liste("Hypothèses fragiles", c.hypotheses_fragiles, a => avecRefs(a.texte))}${liste("Scénarios d'échec", c.scenarios_echec)}${liste("Angles morts", c.angles_morts)}</details>`;
+  } else if (e.etape === "objections") {
+    S.objections = c.objections; phase("reponses");
+    S.liens = c.objections.map(o => o.cible); dessinerLiens();
+    corps = c.objections.map(o => `<div class="obj"><span class="id">${esc(o.id)}</span><div><b>→ ${esc(nomAgent(o.cible))}</b> ${avecRefs(o.texte)}</div></div>`).join("");
+  } else if (e.etape === "reponse") {
+    S.reponses[id] = c;
+    if (S.avis[id]) el.querySelector(".s-bas").innerHTML = `<span class="pos ${S.avis[id].position}" style="opacity:.55">${POS[S.avis[id].position]}</span>→<span class="pos ${c.position_revisee}">${POS[c.position_revisee]}</span>`;
+    corps = c.reponses.map(r => `<div class="obj"><span class="id">${esc(r.objection_id)}</span><div><span class="att ${r.attitude}">${esc(r.attitude)}</span> ${avecRefs(r.texte)}</div></div>`).join("") +
+      `<p style="color:var(--muted)">Position révisée : <span class="pos ${c.position_revisee}">${POS[c.position_revisee]}</span></p>`;
+  } else if (e.etape === "synthese") {
+    S.synthese = c;
+    corps = `<p>${avecRefs(c.recommandation)}</p><p><a href="#" onclick="ouvrirOnglet('decision');return false" style="color:var(--brass)">Ouvrir le dossier de décision →</a></p>`;
+  }
+  const invalides = e.meta.sources_invalides.length ? `<div class="note" style="margin:8px 0 0;border-color:var(--err)">Références introuvables dans le dossier : ${e.meta.sources_invalides.map(chipRef).join(" ")}</div>` : "";
+  const carte = document.createElement("div");
+  carte.className = "carte"; carte.style.setProperty("--c", couleur(id));
+  carte.innerHTML = `<div class="c-tete"><b>${esc(S.config.agents[id].titre)}</b><span class="c-etape">${ETAPES[e.etape]}</span>
+    <span class="c-meta">${esc(e.meta.libelle)} · ${e.meta.duree} s</span></div>${corps}${invalides}`;
+  ajouterFil(carte);
+}
+
+function ajouterFil(noeud) {
+  const v = $("#vue-debat");
+  v.querySelector(".vide")?.remove();
+  v.prepend(noeud);
+}
+
+function note(texte, complement) {
+  const n = document.createElement("div"); n.className = "note";
+  n.innerHTML = esc(texte) + (complement ? `<br><i>« ${esc(complement)} »</i>` : "");
+  ajouterFil(n);
+}
+
+// ------------------------------------------------------------------ liens contradicteur → cibles
+function dessinerLiens() {
+  const svg = $("#liens");
+  const cibles = S.liens || [];
+  const pt = id => { const a = ANGLES[id] * Math.PI / 180; return [50 + RX * Math.cos(a), 50 + RY * Math.sin(a)]; };
+  const [x1, y1] = pt("contradicteur");
+  svg.innerHTML = [...new Set(cibles)].map(c => { const [x2, y2] = pt(c); return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" vector-effect="non-scaling-stroke"/>`; }).join("");
+}
+
+// ------------------------------------------------------------------ validation humaine
+function ouvrirValidation(c) {
+  $("#btnLancer").disabled = false;
+  const manque = !c.suffisant;
+  $("#fenValidation").innerHTML = `<h2>Validation du cadrage</h2>
+    <div class="sous">Le président a cadré la question. Validez-le pour lancer les analyses, ou apportez des précisions pour un nouveau cadrage.</div>
+    <div class="carte" style="--c:var(--brass)"><p style="margin:0;font-family:var(--serif);font-size:16px">${avecRefs(c.question_reformulee)}</p>
+      <p style="color:var(--muted)">${avecRefs(c.decision_attendue)}</p>
+      ${liste("Options", c.options, o => `<b>${esc(o.id)}</b> · ${esc(o.nom)} : ${avecRefs(o.description)}`)}
+      ${liste("Critères de décision", c.criteres)}${liste("Contraintes", c.contraintes)}${liste("Informations manquantes", c.informations_manquantes)}</div>
+    ${c.questions_pour_humain?.length ? `<h4 style="font-size:12px;color:var(--warn);margin:12px 0 4px">${manque ? "Informations indispensables" : "Questions du président"}</h4>${c.questions_pour_humain.map(q => `<div class="alerte-q">${avecRefs(q)}</div>`).join("")}` : ""}
+    <h4 style="font-size:12px;color:var(--muted);margin:14px 0 6px">Vos précisions (transmises à tous les membres)</h4>
+    <textarea id="complement" placeholder="Ex. : la renégociation avec l'éditeur est exclue ; un prestataire peut être financé sur le budget run…"></textarea>
+    <div class="actions"><button class="btn" id="btnValider">Valider et lancer les analyses</button>
+      <button class="btn sec" id="btnRecadrer">Demander un nouveau cadrage</button></div>`;
+  $("#voile").classList.add("on");
+  $("#btnValider").onclick = () => envoyerValidation("valider");
+  $("#btnRecadrer").onclick = () => envoyerValidation("recadrer");
+}
+
+async function envoyerValidation(action) {
+  const complement = $("#complement").value.trim();
+  if (action === "recadrer" && !complement) { $("#complement").focus(); return toast("Indiquez ce que le président doit prendre en compte."); }
+  $("#btnLancer").disabled = true;
+  await fetch(`/api/seances/${S.seance}/validation`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({action, complement})});
+}
+
+// ------------------------------------------------------------------ fin de séance et décision
+function fin(e) {
+  clearInterval(S.timer); $("#btnLancer").disabled = false;
+  document.querySelectorAll(".siege").forEach(s => s.classList.remove("actif"));
+  if (e.erreurs?.length) note("Incidents pendant la séance : " + e.erreurs.join(" ; "));
+  if (!S.synthese) return toast("La séance s'est terminée sans synthèse.");
+  $("#phaseTxt").textContent = "Arbitrage humain";
+  rendreDecision(); ouvrirOnglet("decision");
+}
+
+function rendreDecision() {
+  const s = S.synthese;
+  const lignes = Object.keys(S.avis).map(id => { const a = S.avis[id], r = S.reponses[id];
+    return `<tr><td><span style="color:${couleur(id)}">●</span> ${esc(S.config.agents[id].nom)}</td><td>${esc(a.option_preferee)}</td>
+      <td><span class="pos ${a.position}">${POS[a.position]}</span></td><td>${r ? `<span class="pos ${r.position_revisee}">${POS[r.position_revisee]}</span>` : "<span style='color:var(--faint)'>sans objection</span>"}</td></tr>`; }).join("");
+  $("#vue-decision").innerHTML = `
+    <div class="reco">${avecRefs(s.recommandation)}</div>
+    <div class="bloc"><h3>Conditions</h3><ul>${s.conditions.map(c => `<li>${avecRefs(c)}</li>`).join("")}</ul></div>
+    <div class="bloc"><h3>Options</h3><div class="opts">${s.options.map(o => `<div class="opt"><b>${esc(o.nom)}</b><div class="cols">
+      <div class="pour"><b>Pour</b><ul>${o.pour.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div>
+      <div class="contre"><b>Contre</b><ul>${o.contre.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div></div></div>`).join("")}</div></div>
+    <div class="bloc"><h3>Positions des membres</h3><table class="matrice"><tr><th>Membre</th><th>Option</th><th>Initiale</th><th>Après contradiction</th></tr>${lignes}</table></div>
+    <div class="bloc"><h3>Accords</h3><ul>${s.accords.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div>
+    <div class="bloc"><h3>Désaccords persistants</h3><ul>${s.desaccords.map(d => `<li><b>${esc(d.sujet)}</b> : ${avecRefs(d.positions)}</li>`).join("")}</ul></div>
+    <div class="bloc"><h3>Hypothèses fragiles</h3><ul>${s.hypotheses_fragiles.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div>
+    <div class="bloc"><h3>Informations à obtenir</h3><ul>${s.informations_a_obtenir.map(x => `<li>${avecRefs(x)}</li>`).join("")}</ul></div>
+    <div class="bloc"><h3>Votre arbitrage</h3><textarea id="decision" placeholder="La décision que vous retenez, et pourquoi."></textarea>
+      <div class="actions"><button class="btn" id="btnDecision">Enregistrer la décision</button>
+      <a class="btn sec" style="text-decoration:none" href="/api/seances/${S.seance}/compte-rendu.md">Télécharger le compte rendu</a></div></div>`;
+  $("#btnDecision").onclick = async () => {
+    const texte = $("#decision").value.trim(); if (!texte) return $("#decision").focus();
+    await fetch(`/api/seances/${S.seance}/decision`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({texte})});
+    $("#btnDecision").textContent = "Décision enregistrée ✓";
+  };
+}
+
+// ------------------------------------------------------------------ utilitaires
+function ouvrirOnglet(v) {
+  document.querySelectorAll(".onglet").forEach(b => b.classList.toggle("on", b.dataset.vue === v));
+  document.querySelectorAll(".vue").forEach(x => x.classList.toggle("on", x.id === "vue-" + v));
+}
+
+async function voirSection(ref) {
+  if (!S.dossier) return;
+  const r = await fetch(`/api/dossiers/${encodeURIComponent(S.dossier.nom)}/sections/${encodeURIComponent(ref)}`);
+  $("#popContenu").innerHTML = r.ok ? (s => `<span class="ref">${esc(s.ref)}</span><h2 style="margin-top:6px">${esc(s.titre)}</h2><pre>${esc(s.texte)}</pre>`)(await r.json())
+    : `<h2>${esc(ref)}</h2><p style="color:var(--err)">Cette référence n'existe pas dans le dossier : l'agent l'a probablement inventée.</p>`;
+  $("#pop").classList.add("on");
+}
+
+function toast(m) { const t = $("#toast"); t.textContent = m; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 6000); }
+
+init();
+</script>
+</body>
+</html>

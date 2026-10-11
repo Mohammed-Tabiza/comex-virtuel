@@ -1,0 +1,243 @@
+{
+    "schema_version":  1,
+    "diagram_type":  "architecture",
+    "meta":  {
+                 "title":  "COMEX virtuel — architecture du projet",
+                 "quality_profile":  "showcase",
+                 "viewBox":  [
+                                 1380,
+                                 780
+                             ]
+             },
+    "components":  [
+                       {
+                           "id":  "salle",
+                           "type":  "frontend",
+                           "label":  "Salle du COMEX",
+                           "sublabel":  "static/index.html",
+                           "pos":  [
+                                       40,
+                                       280
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       },
+                       {
+                           "id":  "serveur",
+                           "type":  "backend",
+                           "label":  "API FastAPI",
+                           "sublabel":  "app/server.py · :8000",
+                           "pos":  [
+                                       310,
+                                       280
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       },
+                       {
+                           "id":  "protocole",
+                           "type":  "backend",
+                           "label":  "Protocole LangGraph",
+                           "sublabel":  "app/graph.py · 8 agents",
+                           "pos":  [
+                                       580,
+                                       280
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       },
+                       {
+                           "id":  "adaptateur",
+                           "type":  "backend",
+                           "label":  "Client des modèles",
+                           "sublabel":  "app/llm.py · streaming",
+                           "pos":  [
+                                       850,
+                                       280
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       },
+                       {
+                           "id":  "ollama_local",
+                           "type":  "backend",
+                           "label":  "Ollama local",
+                           "sublabel":  "localhost:11434/v1",
+                           "pos":  [
+                                       1120,
+                                       280
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       },
+                       {
+                           "id":  "reglages",
+                           "type":  "external",
+                           "label":  "Configuration",
+                           "sublabel":  "config.yaml · COMEX_MODE",
+                           "pos":  [
+                                       580,
+                                       55
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       },
+                       {
+                           "id":  "documents",
+                           "type":  "external",
+                           "label":  "Dossiers et rapports",
+                           "sublabel":  "seances/ · Markdown",
+                           "pos":  [
+                                       310,
+                                       540
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       },
+                       {
+                           "id":  "journal",
+                           "type":  "messagebus",
+                           "label":  "État et événements",
+                           "sublabel":  "app/runtime.py · mémoire",
+                           "pos":  [
+                                       580,
+                                       540
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       },
+                       {
+                           "id":  "reponses_test",
+                           "type":  "external",
+                           "label":  "Simulation",
+                           "sublabel":  "app/simulation.py",
+                           "pos":  [
+                                       850,
+                                       540
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       },
+                       {
+                           "id":  "modeles_cloud",
+                           "type":  "cloud",
+                           "label":  "Modèles Ollama cloud",
+                           "sublabel":  "Gemma 4 · GPT OSS 120B",
+                           "pos":  [
+                                       1120,
+                                       540
+                                   ],
+                           "size":  [
+                                        210,
+                                        80
+                                    ]
+                       }
+                   ],
+    "connections":  [
+                        {
+                            "from":  "salle",
+                            "to":  "serveur",
+                            "label":  "HTTP / SSE",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "from":  "serveur",
+                            "to":  "protocole",
+                            "label":  "Séance",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "from":  "protocole",
+                            "to":  "adaptateur",
+                            "label":  "Prompts",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "from":  "adaptateur",
+                            "to":  "ollama_local",
+                            "label":  "API OpenAI",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "from":  "reglages",
+                            "to":  "protocole",
+                            "label":  "Rôles et réglages",
+                            "fromSide":  "bottom",
+                            "toSide":  "top",
+                            "labelDy":  65
+                        },
+                        {
+                            "from":  "serveur",
+                            "to":  "documents",
+                            "label":  "Lecture / écriture",
+                            "fromSide":  "bottom",
+                            "toSide":  "top",
+                            "labelDy":  65
+                        },
+                        {
+                            "from":  "protocole",
+                            "to":  "journal",
+                            "label":  "Événements",
+                            "fromSide":  "bottom",
+                            "toSide":  "top",
+                            "labelDy":  65
+                        },
+                        {
+                            "from":  "adaptateur",
+                            "to":  "reponses_test",
+                            "label":  "Mode simulation",
+                            "variant":  "dashed",
+                            "labelDy":  90
+                        },
+                        {
+                            "from":  "ollama_local",
+                            "to":  "modeles_cloud",
+                            "label":  "Mode réel",
+                            "labelDy":  90
+                        }
+                    ],
+    "cards":  [
+                  {
+                      "dot":  "cyan",
+                      "title":  "Décision humaine",
+                      "items":  [
+                                    "Cadrage → validation → analyses en parallèle",
+                                    "Contradiction → réponses → synthèse → arbitrage"
+                                ]
+                  },
+                  {
+                      "dot":  "emerald",
+                      "title":  "Deux modèles actifs",
+                      "items":  [
+                                    "Gemma 4 : président, finance, stratégie, clients, RH",
+                                    "GPT OSS : contradicteur, risques, opérations"
+                                ]
+                  },
+                  {
+                      "dot":  "amber",
+                      "title":  "Exécution et conservation",
+                      "items":  [
+                                    "Le front est servi par FastAPI, sans serveur séparé",
+                                    "Séances en mémoire ; comptes rendus sur disque"
+                                ]
+                  }
+              ]
+}

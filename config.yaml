@@ -1,0 +1,50 @@
+# Configuration du COMEX virtuel
+# Les valeurs ${NOM} sont remplacées par les variables d'environnement correspondantes.
+
+# simulation : réponses préenregistrées, aucun appel aux modèles (pour tester l'interface)
+# reel       : appels à Ollama
+# La variable d'environnement COMEX_MODE est prioritaire sur cette valeur.
+mode: simulation
+
+modeles:
+  gemma:
+    libelle: "Gemma 4 31B Cloud"
+    famille: ollama
+    base_url: "http://localhost:11434/v1"
+    api_key: ""                      # aucune clé API
+    model: "gemma4:31b-cloud"
+    contexte_max: 32768
+    concurrence_max: 4
+    temperature: 0.6
+    max_tokens: 3072
+
+  gpt_oss:
+    libelle: "GPT OSS 120B Cloud"
+    famille: ollama
+    base_url: "http://localhost:11434/v1"
+    api_key: ""                      # aucune clé API
+    model: "gpt-oss:120b-cloud"
+    contexte_max: 32768
+    concurrence_max: 4
+    temperature: 0.5
+    max_tokens: 4096
+
+# Répartition des agents sur les modèles (modifiable sans toucher au code)
+agents:
+  president:    { modele: gemma, thinking: true }
+  contradicteur: { modele: gpt_oss, thinking: true }
+  finance:      { modele: gemma, thinking: false }
+  strategie:    { modele: gemma, thinking: false }
+  risques:      { modele: gpt_oss, thinking: false }
+  operations:   { modele: gpt_oss, thinking: false }
+  clients:      { modele: gemma, thinking: false }
+  rh:           { modele: gemma, thinking: false }
+
+protocole:
+  # Taille maximale du dossier (en tokens estimés) avant avertissement
+  budget_dossier_tokens: 15000
+  # json_schema : sortie contrainte par vLLM (recommandé)
+  # consigne    : schéma donné dans le prompt uniquement (si json_schema pose problème)
+  sortie_structuree: json_schema
+  # Durée simulée d'un appel en mode simulation (secondes, min / max)
+  simulation_duree: [3, 8]

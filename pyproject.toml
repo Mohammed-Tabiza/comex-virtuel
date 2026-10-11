@@ -1,0 +1,13 @@
+[project]
+name = "comex-virtuel"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.110",
+    "langgraph>=1.0",
+    "openai>=1.40",
+    "pyyaml>=6.0",
+    "uvicorn>=0.29",
+]
