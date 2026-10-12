@@ -96,6 +96,22 @@ Les silences sont raccourcis ; la validation du cadrage reste affichée quelques
 
 Un rejeu contient le contenu des analyses : versionnez uniquement ceux des dossiers non confidentiels.
 
+### Traçabilité et format des rejeux
+
+Depuis la version 2 du format, un rejeu enregistre aussi :
+- la **composition** complète (gabarit et version, rôle et version de chaque membre, modèle, mandat
+  effectivement envoyé et mandat de la bibliothèque) et les **révisions** de l'équipe ;
+- la **consigne complète** de chaque appel, avec le rôle, sa version et le modèle ; chaque contribution
+  y renvoie par `meta.consigne.index` (`GET /api/dossiers/<nom>/rejeux/<id>/consignes/<index>`) ;
+- l'**empreinte** du dossier et du préfixe commun : le dossier n'est pas recopié, mais on sait s'il a changé.
+
+Les rejeux de version 1 restent lisibles tels quels : l'API les ramène au format courant sans modifier le fichier.
+
+Le compte rendu comporte une section **Composition du comité** : membres, versions des rôles, modèles et
+hébergement, mandats modifiés (différence mot à mot avec la bibliothèque), rôles obligatoires retirés avec
+leur justification, révisions de l'équipe, couverture des critères, critique de la composition par le
+contradicteur et compactages éventuels du contexte.
+
 ## Confidentialité des dossiers
 
 Chaque modèle déclare son hébergement dans `config.yaml` : `hebergement: interne` (vLLM sur site, par exemple)

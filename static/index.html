@@ -394,7 +394,7 @@ async function chargerRejeux(selection = "") {
   const liste = S.dossier ? await (await fetch(`/api/dossiers/${encodeURIComponent(S.dossier.nom)}/rejeux`)).json() : [];
   const duree = t => `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
   $("#choixRejeu").innerHTML = `<option value="">Séance en direct</option>` + liste.map(r =>
-    `<option value="${esc(r.id)}" title="${esc((r.modeles || []).join(" + "))}">Rejeu du ${esc(new Date(r.date).toLocaleString("fr-FR", {dateStyle: "short", timeStyle: "short"}))} (${duree(r.duree || 0)}${r.mode !== "reel" ? ", simulation" : ""}${r.decision ? ", décision" : ""})</option>`).join("");
+    `<option value="${esc(r.id)}" title="${esc((r.modeles || []).join(" + "))}">Rejeu du ${esc(new Date(r.date).toLocaleString("fr-FR", {dateStyle: "short", timeStyle: "short"}))} · ${esc(r.gabarit || "COMEX")}, ${r.experts} experts (${duree(r.duree || 0)}${r.mode !== "reel" ? ", simulation" : ""}${r.decision ? ", décision" : ""})</option>`).join("");
   $("#choixRejeu").value = selection;
   majBouton();
 }

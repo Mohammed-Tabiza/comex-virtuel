@@ -40,6 +40,11 @@ class Dossier:
     gabarit: str = ""          # comité présélectionné pour ce dossier (facultatif)
 
     @property
+    def empreinte(self) -> str:
+        from .trace import empreinte
+        return empreinte(self.texte)
+
+    @property
     def refs(self) -> set[str]:
         return {s.ref for d in self.documents for s in d.sections}
 

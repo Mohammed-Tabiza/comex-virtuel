@@ -25,6 +25,7 @@ from .comites import Membre
 from .dossier import refs_citees
 from .llm import Modeles
 from .runtime import seance_de
+from .trace import enregistrer_consigne
 
 MODELES: Modeles | None = None      # initialisé par le serveur au démarrage
 
@@ -137,6 +138,7 @@ async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: C
             await seance.publier("agent_flux", agent=agent_id, nature=nature,
                                  extrait=texte_affiche[-240:], caracteres=len(tampons[nature]))
 
+    reference = enregistrer_consigne(seance, membre, etape, messages, compactage)
     try:
         resultat, meta = await MODELES.generer(agent_id, etape, messages, on_flux,
                                                modele=membre.modele, thinking=membre.thinking, schema=schema)
@@ -153,6 +155,7 @@ async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: C
     meta["sources"] = sorted(citees & seance.dossier.refs)
     meta["sources_invalides"] = sorted(citees - seance.dossier.refs)
     meta["role"] = {"id": membre.role_id, "version": membre.role_version, "mandat_modifie": membre.mandat_modifie}
+    meta["consigne"] = reference
     await seance.publier("contribution", agent=agent_id, etape=etape, contenu=resultat, meta=meta)
     await seance.publier("agent_statut", agent=agent_id, statut="termine", etape=etape,
                          libelle=LIBELLES[etape], duree=meta["duree"])

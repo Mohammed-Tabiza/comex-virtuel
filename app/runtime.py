@@ -21,6 +21,7 @@ class Seance:
     revisions: list[dict] = field(default_factory=list)     # révisions de l'équipe à la validation
     estimation: dict = field(default_factory=dict)           # estimation du contexte au lancement
     calibration: float = 1.0                                 # écart constaté entre comptage réel et estimation
+    consignes: list[dict] = field(default_factory=list)      # consigne complète de chaque appel (traçabilité)
     statut: str = "creee"            # creee | en_cours | attente_validation | terminee | erreur
     debut: float = field(default_factory=time.time)
     decision_humaine: str = ""

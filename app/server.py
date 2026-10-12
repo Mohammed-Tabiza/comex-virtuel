@@ -17,6 +17,7 @@ from . import graph as G
 from .comites import (Bibliotheque, Composition, ErreurComposition, couverture_cadrage, difference,
                       modeles_externes, resoudre_composition)
 from .contexte import estimer_seance
+from .trace import construire_rejeu, lire_rejeu, resume_rejeu
 from .config import RACINE, charger_config
 from .dossier import charger_dossier
 from .llm import Modeles
@@ -120,39 +121,33 @@ def _lancer(seance: Seance, entree) -> None:
 def _sauvegarder(seance: Seance, etat: dict) -> None:
     sortie = DOSSIERS / seance.dossier.nom / "resultats"
     sortie.mkdir(exist_ok=True)
-    rapport = compte_rendu(seance, etat)
+    rapport = compte_rendu(seance, etat, ETAT["config"]["modeles"])
     (sortie / f"{seance.id}.md").write_text(rapport, encoding="utf-8")
     (sortie / f"{seance.id}.json").write_text(
         json.dumps({"etat": etat, "decision_humaine": seance.decision_humaine}, ensure_ascii=False, indent=1),
         encoding="utf-8")
     if seance.statut == "terminee":
-        _enregistrer_rejeu(seance, rapport)
+        _enregistrer_rejeu(seance, rapport, etat)
 
 
 # --------------------------------------------------------------------------- rejeu
 ID_SEANCE = re.compile(r"^[0-9a-f]{8}$")
 
 
-def _enregistrer_rejeu(seance: Seance, rapport: str) -> None:
-    """Enregistre le journal complet d'une séance terminée, pour la rejouer sans appeler les modèles."""
+def _enregistrer_rejeu(seance: Seance, rapport: str, etat: dict | None = None) -> None:
+    """Enregistre le journal complet d'une séance terminée (format version 2), pour la rejouer sans appeler
+    les modèles et retrouver la consigne exacte de chaque contribution."""
     dossier = DOSSIERS / seance.dossier.nom / "rejeux"
     dossier.mkdir(exist_ok=True)
-    cfg = _config_publique()
-    vue = _vue_composition(seance.composition)
-    rejeu = {
-        "id": seance.id,
-        "dossier": seance.dossier.nom,
-        "date": datetime.fromtimestamp(seance.debut).isoformat(timespec="seconds"),
-        "mode": cfg["mode"],
-        "duree": seance.evenements[-1]["t"] if seance.evenements else 0,
-        "modeles": sorted({a["libelle_modele"] for a in vue["agents"].values()}),
-        "decision_humaine": seance.decision_humaine,
-        "config": {"agents": vue["agents"], "experts": vue["experts"], "modeles": cfg["modeles"]},
-        "composition": seance.composition.vers_dict(),
-        "compte_rendu": rapport,
-        "evenements": seance.evenements,
-    }
+    etat = etat or {}
+    rejeu = construire_rejeu(seance, vue_composition=_vue_composition(seance.composition),
+                             modeles=_config_publique()["modeles"], mode=ETAT["config"]["mode"], rapport=rapport,
+                             revisions_etat=etat.get("revisions_composition"), compactages=etat.get("compactages"))
     (dossier / f"{seance.id}.json").write_text(json.dumps(rejeu, ensure_ascii=False), encoding="utf-8")
+
+
+def _lire_rejeu(nom: str, rejeu_id: str) -> dict:
+    return lire_rejeu(json.loads(_fichier_rejeu(nom, rejeu_id).read_text(encoding="utf-8")))
 
 
 def _fichier_rejeu(nom: str, rejeu_id: str) -> Path:
@@ -301,19 +296,28 @@ async def rejeux(nom: str):
             r = json.loads(chemin.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        resultat.append({k: r.get(k) for k in ("id", "date", "mode", "duree", "modeles")}
-                        | {"decision": bool(r.get("decision_humaine"))})
+        resultat.append(resume_rejeu(r))
     return sorted(resultat, key=lambda r: r["date"] or "", reverse=True)
 
 
 @app.get("/api/dossiers/{nom}/rejeux/{rejeu_id}")
 async def rejeu(nom: str, rejeu_id: str):
-    return FileResponse(_fichier_rejeu(nom, rejeu_id), media_type="application/json")
+    """Rejeu ramené au format courant (les rejeux de version 1 restent lisibles)."""
+    return _lire_rejeu(nom, rejeu_id)
+
+
+@app.get("/api/dossiers/{nom}/rejeux/{rejeu_id}/consignes/{index}")
+async def rejeu_consigne(nom: str, rejeu_id: str, index: int):
+    """Consigne exacte envoyée au modèle pour une contribution (index : métadonnée consigne.index)."""
+    consignes = _lire_rejeu(nom, rejeu_id)["consignes"]
+    if not 0 <= index < len(consignes):
+        raise HTTPException(404, "Consigne inconnue")
+    return consignes[index]
 
 
 @app.get("/api/dossiers/{nom}/rejeux/{rejeu_id}/compte-rendu.md")
 async def rejeu_compte_rendu(nom: str, rejeu_id: str):
-    r = json.loads(_fichier_rejeu(nom, rejeu_id).read_text(encoding="utf-8"))
+    r = _lire_rejeu(nom, rejeu_id)
     return PlainTextResponse(r.get("compte_rendu", ""), media_type="text/markdown; charset=utf-8",
                              headers={"Content-Disposition": f'attachment; filename="comex-{rejeu_id}.md"'})
 
@@ -422,7 +426,7 @@ async def decision(seance_id: str, corps: Decision):
 @app.get("/api/seances/{seance_id}/compte-rendu.md")
 async def telecharger_compte_rendu(seance_id: str):
     seance = _seance(seance_id)
-    return PlainTextResponse(compte_rendu(seance, await _etat(seance_id)), media_type="text/markdown; charset=utf-8",
+    return PlainTextResponse(compte_rendu(seance, await _etat(seance_id), ETAT["config"]["modeles"]), media_type="text/markdown; charset=utf-8",
                              headers={"Content-Disposition": f'attachment; filename="comex-{seance_id}.md"'})
 
 
