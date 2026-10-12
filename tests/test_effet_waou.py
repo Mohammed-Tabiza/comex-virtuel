@@ -9,13 +9,16 @@ from unittest.mock import patch
 import httpx
 
 from app import server
-from app.agents import EXPERTS, SCHEMAS
-from app.config import agents_sur_modeles_externes, charger_config
+from app.agents import SCHEMAS
+from app.comites import Bibliotheque, modeles_externes, resoudre_composition
+from app.config import charger_config
 from app.dossier import charger_dossier
 from app.runtime import Seance
 from app.simulation import REPONSES
 
 RACINE = Path(__file__).resolve().parents[1]
+EXPERTS = ["strategie", "finance", "clients", "operations", "risques", "rh"]
+BIB = Bibliotheque.charger(RACINE / "comites")
 
 
 def config_test(mode="reel", hebergement="externe"):
@@ -24,7 +27,13 @@ def config_test(mode="reel", hebergement="externe"):
         "modeles": {"m": {"libelle": "Modèle test", "famille": "test", "hebergement": hebergement, "base_url": "http://x"}},
         "agents": {a: {"modele": "m"} for a in ["president", "contradicteur", *EXPERTS]},
         "protocole": {"budget_dossier_tokens": 15000},
+        "bibliotheque": str(RACINE / "comites"),
+        "gabarit_defaut": "comex",
     }
+
+
+def composition(cfg):
+    return resoudre_composition(BIB, cfg, "comex")
 
 
 def creer_dossier(racine: Path, nom: str, meta: str | None) -> Path:
@@ -57,8 +66,9 @@ class ConfidentialiteTests(unittest.TestCase):
                 chemin.write_text(json.dumps(cfg), encoding="utf-8")
                 with self.assertRaises(ValueError):
                     charger_config(chemin)
-        self.assertEqual(len(agents_sur_modeles_externes(config_test())), 8)
-        self.assertEqual(agents_sur_modeles_externes(config_test(hebergement="interne")), [])
+        self.assertEqual(len(modeles_externes(composition(config_test()), config_test())), 8)
+        interne = config_test(hebergement="interne")
+        self.assertEqual(modeles_externes(composition(interne), interne), [])
 
     def test_seance_confidentielle_refusee_si_un_modele_est_externe(self):
         async def verifier():
@@ -72,9 +82,9 @@ class ConfidentialiteTests(unittest.TestCase):
                     self.assertTrue((await c.get("/api/dossiers/reel")).json()["blocage"])
                 dossier = charger_dossier(Path(tmp) / "reel")
                 server.ETAT["config"] = config_test(hebergement="interne")
-                self.assertIsNone(server._blocage_confidentialite(dossier))
+                self.assertIsNone(server._blocage_confidentialite(dossier, composition(server.ETAT["config"])))
                 server.ETAT["config"] = config_test(mode="simulation")
-                self.assertIsNone(server._blocage_confidentialite(dossier))
+                self.assertIsNone(server._blocage_confidentialite(dossier, composition(server.ETAT["config"])))
         asyncio.run(verifier())
 
 
@@ -85,6 +95,7 @@ class RejeuTests(unittest.TestCase):
                 creer_dossier(Path(tmp), "demo", "confidentiel: false\n")
                 server.ETAT["config"] = config_test(mode="simulation")
                 seance = Seance(id="abcdef12", dossier=charger_dossier(Path(tmp) / "demo"))
+                seance.fixer_composition(composition(server.ETAT["config"]))
                 await seance.publier("phase", phase="cadrage")
                 await seance.publier("seance_terminee", statut="terminee", erreurs=[])
                 seance.statut = "terminee"
@@ -97,6 +108,8 @@ class RejeuTests(unittest.TestCase):
                     rejeu = (await c.get("/api/dossiers/demo/rejeux/abcdef12")).json()
                     self.assertEqual([e["type"] for e in rejeu["evenements"]], ["phase", "seance_terminee"])
                     self.assertIn("president", rejeu["config"]["agents"])
+                    self.assertEqual(rejeu["config"]["experts"], EXPERTS)
+                    self.assertEqual(rejeu["composition"]["gabarit_id"], "comex")
                     cr = await c.get("/api/dossiers/demo/rejeux/abcdef12/compte-rendu.md")
                     self.assertIn("Option C retenue.", cr.text)
                     self.assertEqual((await c.get("/api/dossiers/demo/rejeux/..%2Fx")).status_code, 404)
@@ -108,6 +121,7 @@ class RejeuTests(unittest.TestCase):
             creer_dossier(Path(tmp), "demo", None)
             server.ETAT["config"] = config_test(mode="simulation")
             seance = Seance(id="abcdef13", dossier=charger_dossier(Path(tmp) / "demo"))
+            seance.fixer_composition(composition(server.ETAT["config"]))
             seance.statut = "erreur"
             server._sauvegarder(seance, {})
             self.assertFalse((Path(tmp) / "demo" / "rejeux").exists())

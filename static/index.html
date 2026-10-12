@@ -454,7 +454,9 @@ async function rejouer(id) {
   if (!r.ok) return toast("Rejeu introuvable");
   const data = await r.json();
   S.rejeu = data; S.seance = null;
-  reinitialiser({...S.configLive, mode: data.mode, agents: data.config.agents, modeles: data.config.modeles});
+  // Anciens rejeux : pas de liste d'experts enregistrée, on la déduit des membres hors fonctions du protocole
+  const experts = data.config.experts || Object.keys(data.config.agents).filter(id => id !== "president" && id !== "contradicteur");
+  reinitialiser({...S.configLive, mode: data.mode, agents: data.config.agents, experts, modeles: data.config.modeles});
   majChipMode();
   const jeton = S.jetonRejeu, vitesse = +$("#vitesse").value;
   let precedent = 0;
@@ -471,6 +473,8 @@ async function rejouer(id) {
 function traiter(e) {
   switch (e.type) {
     case "dossier_charge": majTokens(e.dossier.tokens_estimes, e.budget);
+      // Chaque séance a son comité : les experts affichés sont ceux de la séance, pas ceux du comité par défaut
+      if (e.comite) { S.config = {...S.config, agents: e.comite.agents, experts: e.comite.experts}; }
       if (e.depassement) note("Le dossier dépasse le budget de contexte configuré : les agents servis par les plus petits modèles risquent d'être tronqués."); break;
     case "phase": phase(e.phase); break;
     case "agent_statut": statut(e); break;

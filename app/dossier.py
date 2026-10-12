@@ -37,6 +37,7 @@ class Dossier:
     # (fichier _dossier.yaml) peut être envoyé à des modèles hébergés hors de l'entreprise.
     confidentiel: bool = True
     description: str = ""
+    gabarit: str = ""          # comité présélectionné pour ce dossier (facultatif)
 
     @property
     def refs(self) -> set[str]:
@@ -55,6 +56,7 @@ class Dossier:
             "tokens_estimes": self.tokens_estimes,
             "confidentiel": self.confidentiel,
             "description": self.description,
+            "gabarit": self.gabarit,
             "documents": [
                 {"id": d.id, "fichier": d.fichier, "titre": d.titre,
                  "sections": [{"ref": s.ref, "titre": s.titre} for s in d.sections]}
@@ -100,14 +102,15 @@ def charger_dossier(repertoire: Path) -> Dossier:
     texte = "\n\n".join(blocs)
     meta = lire_meta(repertoire)
     return Dossier(nom=repertoire.name, documents=documents, texte=texte, tokens_estimes=estimer_tokens(texte),
-                   confidentiel=meta["confidentiel"], description=meta["description"])
+                   confidentiel=meta["confidentiel"], description=meta["description"], gabarit=meta["gabarit"])
 
 
 def lire_meta(repertoire: Path) -> dict:
     """Lit _dossier.yaml. Toute valeur autre que `confidentiel: false` laisse le dossier confidentiel."""
     chemin = repertoire / "_dossier.yaml"
     meta = (yaml.safe_load(chemin.read_text(encoding="utf-8")) or {}) if chemin.exists() else {}
-    return {"confidentiel": meta.get("confidentiel") is not False, "description": str(meta.get("description", ""))}
+    return {"confidentiel": meta.get("confidentiel") is not False, "description": str(meta.get("description", "")),
+            "gabarit": str(meta.get("gabarit") or "")}
 
 
 def refs_citees(obj) -> set[str]:

@@ -13,8 +13,8 @@ from langgraph.types import Command
 from pydantic import BaseModel
 
 from . import graph as G
-from .agents import AGENTS, EXPERTS
-from .config import RACINE, agents_sur_modeles_externes, charger_config
+from .comites import Bibliotheque, Composition, ErreurComposition, modeles_externes, resoudre_composition
+from .config import RACINE, charger_config
 from .dossier import charger_dossier
 from .llm import Modeles
 from .rapport import compte_rendu
@@ -22,12 +22,13 @@ from .runtime import SEANCES, Seance
 
 DOSSIERS = RACINE / "seances"
 STATIQUE = RACINE / "static"
-ETAT = {"config": None, "graphe": None, "taches": set()}
+ETAT = {"config": None, "graphe": None, "taches": set(), "bibliotheque": None}
 
 
 @asynccontextmanager
 async def cycle_de_vie(app: FastAPI):
     ETAT["config"] = charger_config()
+    ETAT["bibliotheque"] = None
     G.MODELES = Modeles(ETAT["config"])
     ETAT["graphe"] = G.construire_graphe()
     print(f"COMEX virtuel prêt : mode {ETAT['config']['mode']}")
@@ -39,6 +40,12 @@ app = FastAPI(title="COMEX virtuel", lifespan=cycle_de_vie)
 
 class NouvelleSeance(BaseModel):
     dossier: str
+    # Composition du comité (toutes facultatives : par défaut, le gabarit du dossier et sa présélection)
+    gabarit: str | None = None
+    selection: list[str] | None = None
+    mandats: dict[str, str] | None = None
+    affectations: dict[str, str] | None = None
+    retraits_justifies: dict[str, str] | None = None
 
 
 class Validation(BaseModel):
@@ -110,15 +117,17 @@ def _enregistrer_rejeu(seance: Seance, rapport: str) -> None:
     dossier = DOSSIERS / seance.dossier.nom / "rejeux"
     dossier.mkdir(exist_ok=True)
     cfg = _config_publique()
+    vue = _vue_composition(seance.composition)
     rejeu = {
         "id": seance.id,
         "dossier": seance.dossier.nom,
         "date": datetime.fromtimestamp(seance.debut).isoformat(timespec="seconds"),
         "mode": cfg["mode"],
         "duree": seance.evenements[-1]["t"] if seance.evenements else 0,
-        "modeles": sorted({a["libelle_modele"] for a in cfg["agents"].values()}),
+        "modeles": sorted({a["libelle_modele"] for a in vue["agents"].values()}),
         "decision_humaine": seance.decision_humaine,
-        "config": {"agents": cfg["agents"], "modeles": cfg["modeles"]},
+        "config": {"agents": vue["agents"], "experts": vue["experts"], "modeles": cfg["modeles"]},
+        "composition": seance.composition.vers_dict(),
         "compte_rendu": rapport,
         "evenements": seance.evenements,
     }
@@ -135,43 +144,90 @@ def _fichier_rejeu(nom: str, rejeu_id: str) -> Path:
 
 
 # --------------------------------------------------------------------------- API
+def _bibliotheque() -> Bibliotheque:
+    if ETAT["bibliotheque"] is None:
+        ETAT["bibliotheque"] = Bibliotheque.charger(Path(ETAT["config"].get("bibliotheque") or RACINE / "comites"))
+    return ETAT["bibliotheque"]
+
+
+def _vue_composition(composition: Composition) -> dict:
+    """Vue publique d'une composition, au format attendu par l'interface et les rejeux."""
+    modeles = ETAT["config"]["modeles"]
+    agents = {}
+    for m in composition.membres:
+        reglages = modeles.get(m.modele, {})
+        agents[m.id] = {"nom": m.nom, "titre": m.titre, "initiales": m.initiales, "mandat": m.mandat,
+                        "fonction": m.fonction, "role_id": m.role_id, "role_version": m.role_version,
+                        "mandat_modifie": m.mandat_modifie, "criteres": m.criteres,
+                        "modele": m.modele, "libelle_modele": reglages.get("libelle", m.modele),
+                        "famille": reglages.get("famille", ""), "hebergement": reglages.get("hebergement", "externe"),
+                        "thinking": m.thinking, "note_affectation": m.note_affectation}
+    return {"gabarit": {"id": composition.gabarit_id, "version": composition.gabarit_version,
+                        "nom": composition.gabarit_nom},
+            "experts": composition.experts, "agents": agents, "retraits_justifies": composition.retraits_justifies}
+
+
+def _gabarit_du_dossier(dossier) -> str:
+    return dossier.gabarit or ETAT["config"].get("gabarit_defaut") or "comex"
+
+
+def _composer(dossier, demande: NouvelleSeance | None = None) -> Composition:
+    demande = demande or NouvelleSeance(dossier=dossier.nom)
+    return resoudre_composition(_bibliotheque(), ETAT["config"], demande.gabarit or _gabarit_du_dossier(dossier),
+                                selection=demande.selection, mandats=demande.mandats,
+                                affectations=demande.affectations, retraits_justifies=demande.retraits_justifies)
+
+
 def _config_publique() -> dict:
     cfg = ETAT["config"]
+    vue = _vue_composition(resoudre_composition(_bibliotheque(), cfg, cfg.get("gabarit_defaut") or "comex"))
     return {
         "mode": cfg["mode"],
-        "experts": EXPERTS,
+        "gabarit_defaut": vue["gabarit"],
+        "experts": vue["experts"],                         # comité par défaut ; chaque séance a le sien
         "modeles": {nom: {"libelle": m["libelle"], "famille": m.get("famille", ""), "hebergement": m["hebergement"]}
                     for nom, m in cfg["modeles"].items()},
-        "agents": {a: {**AGENTS[a], "modele": cfg["agents"][a]["modele"],
-                       "libelle_modele": cfg["modeles"][cfg["agents"][a]["modele"]]["libelle"],
-                       "famille": cfg["modeles"][cfg["agents"][a]["modele"]].get("famille", ""),
-                       "hebergement": cfg["modeles"][cfg["agents"][a]["modele"]]["hebergement"],
-                       "thinking": cfg["agents"][a].get("thinking", False)} for a in AGENTS},
+        "agents": vue["agents"],
         "budget_dossier_tokens": cfg["protocole"]["budget_dossier_tokens"],
     }
 
 
-def _blocage_confidentialite(dossier) -> dict | None:
-    """Raison du refus si un dossier confidentiel devait partir vers un modèle externe, sinon None."""
+def _blocage_confidentialite(dossier, composition: Composition) -> dict | None:
+    """Raison du refus si un dossier confidentiel devait partir vers un modèle externe, sinon None.
+
+    Le contrôle porte sur la composition réelle de la séance (membres et modèles choisis)."""
     cfg = ETAT["config"]
     if cfg["mode"] != "reel" or not dossier.confidentiel:
         return None                       # en simulation, aucune donnée n'est envoyée à un modèle
-    externes = agents_sur_modeles_externes(cfg)
+    externes = modeles_externes(composition, cfg)
     if not externes:
         return None
     modeles = sorted({e["libelle"] for e in externes})
     return {
         "code": "confidentialite",
-        "message": f"Dossier confidentiel : {len(externes)} agent(s) utilisent un modèle hébergé hors de "
-                   f"l'entreprise ({', '.join(modeles)}). Affectez-les à des modèles internes dans config.yaml, "
+        "message": f"Dossier confidentiel : {len(externes)} membre(s) du comité utilisent un modèle hébergé hors de "
+                   f"l'entreprise ({', '.join(modeles)}). Affectez-les à des modèles internes, "
                    "ou déclarez le dossier non confidentiel dans _dossier.yaml s'il ne contient aucune donnée réelle.",
         "agents": externes,
     }
 
 
+def _modeles_sans_endpoint(composition: Composition) -> list[str]:
+    cfg = ETAT["config"]
+    if cfg["mode"] != "reel":
+        return []
+    return sorted({m.modele for m in composition.membres if not cfg["modeles"][m.modele].get("base_url")})
+
+
 @app.get("/api/config")
 async def config_publique():
     return _config_publique()
+
+
+@app.get("/api/comites")
+async def comites():
+    """Bibliothèque des rôles et gabarits de comité."""
+    return _bibliotheque().catalogue()
 
 
 @app.get("/api/dossiers")
@@ -182,7 +238,9 @@ async def dossiers():
 @app.get("/api/dossiers/{nom}")
 async def dossier_detail(nom: str):
     dossier = charger_dossier(DOSSIERS / Path(nom).name)
-    return {**dossier.resume(), "blocage": _blocage_confidentialite(dossier)}
+    composition = _composer(dossier)
+    return {**dossier.resume(), "gabarit": _gabarit_du_dossier(dossier),
+            "comite": _vue_composition(composition), "blocage": _blocage_confidentialite(dossier, composition)}
 
 
 @app.get("/api/dossiers/{nom}/rejeux")
@@ -228,14 +286,23 @@ async def creer_seance(corps: NouvelleSeance):
     if not repertoire.is_dir():
         raise HTTPException(404, "Dossier introuvable")
     dossier = charger_dossier(repertoire)
-    blocage = _blocage_confidentialite(dossier)
+    try:
+        composition = _composer(dossier, corps)
+    except ErreurComposition as e:
+        raise HTTPException(422, {"code": "composition", "message": str(e), "erreurs": e.erreurs})
+    blocage = _blocage_confidentialite(dossier, composition)
     if blocage:
         raise HTTPException(403, blocage)
+    sans_endpoint = _modeles_sans_endpoint(composition)
+    if sans_endpoint:
+        raise HTTPException(422, {"code": "modele", "message": f"base_url manquante pour : {', '.join(sans_endpoint)}"})
     seance = Seance(id=uuid.uuid4().hex[:8], dossier=dossier)
+    seance.fixer_composition(composition)          # figée au lancement, propre à cette séance
     SEANCES[seance.id] = seance
     budget = ETAT["config"]["protocole"]["budget_dossier_tokens"]
     await seance.publier("dossier_charge", dossier=dossier.resume(), budget=budget,
-                         depassement=dossier.tokens_estimes > budget, mode=ETAT["config"]["mode"])
+                         depassement=dossier.tokens_estimes > budget, mode=ETAT["config"]["mode"],
+                         comite=_vue_composition(composition))
     _lancer(seance, {"complement": ""})
     return {"seance_id": seance.id}
 

@@ -1,7 +1,6 @@
 """Compte rendu de séance en Markdown (dossier de décision exportable)."""
 from datetime import datetime
 
-from .agents import AGENTS
 
 POSITIONS = {"favorable": "Favorable", "favorable_sous_conditions": "Favorable sous conditions",
              "reserve": "Réservé", "defavorable": "Défavorable"}
@@ -9,6 +8,14 @@ POSITIONS = {"favorable": "Favorable", "favorable_sous_conditions": "Favorable s
 
 def _liste(items) -> str:
     return "\n".join(f"- {i}" for i in items) if items else "- (aucun)"
+
+
+def _membre(seance, agent_id: str, champ: str) -> str:
+    """Titre ou nom d'un membre, lu dans la composition de la séance (identifiant à défaut)."""
+    try:
+        return getattr(seance.composition.membre(agent_id), champ)
+    except (AttributeError, KeyError):
+        return agent_id
 
 
 def compte_rendu(seance, etat: dict) -> str:
@@ -27,7 +34,7 @@ def compte_rendu(seance, etat: dict) -> str:
     for cle, avis in (etat.get("avis") or {}).items():
         agent = cle.split(":")[0]
         rep = (etat.get("reponses") or {}).get(f"{agent}:reponse") or {}
-        l.append(f"| {AGENTS[agent]['titre']} | {avis['_meta']['libelle']} | {avis.get('option_preferee', '')} | "
+        l.append(f"| {_membre(seance, agent, 'titre')} | {avis['_meta']['libelle']} | {avis.get('option_preferee', '')} | "
                  f"{POSITIONS.get(avis.get('position'), '')} | {rep.get('option_revisee', '-') if rep else '-'} | "
                  f"{POSITIONS.get(rep.get('position_revisee'), '-')} |")
 
@@ -53,7 +60,7 @@ def compte_rendu(seance, etat: dict) -> str:
             reponses[item["objection_id"]] = item
     for o in etat.get("objections") or []:
         r = reponses.get(o["id"])
-        l.append(f"- **{o['id']} → {AGENTS[o['cible']]['nom']}** : {o['texte']}")
+        l.append(f"- **{o['id']} → {_membre(seance, o['cible'], 'nom')}** : {o['texte']}")
         if r:
             l.append(f"  - *{r['attitude']}* : {r['texte']}")
     l += ["", "## Décision humaine", seance.decision_humaine or "(non renseignée)"]

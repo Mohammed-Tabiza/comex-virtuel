@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.agents import AGENTS, EXPERTS
 from app.comites import (Bibliotheque, Composition, ErreurBibliotheque, ErreurComposition,
                          modeles_externes, normaliser, normaliser_affectation, resoudre_composition)
 from app.config import charger_config
@@ -201,10 +200,12 @@ class ConfigurationTests(unittest.TestCase):
     def test_la_configuration_livree_conserve_la_repartition_du_comex(self):
         with patch.dict("os.environ", {"COMEX_MODE": "simulation"}):
             cfg = charger_config(RACINE / "config.yaml")
-        self.assertEqual(set(cfg["agents"]), set(AGENTS))
-        self.assertEqual({a for a, r in cfg["agents"].items() if r["thinking"]}, {"president", "contradicteur"})
-        self.assertEqual([cfg["agents"][e]["modele"] for e in EXPERTS], ["gemma", "gemma", "gemma", "gpt_oss", "gpt_oss", "gemma"])
-
+        self.assertNotIn("agents", cfg)                       # plus aucune table agent → modèle globale
+        c = resoudre_composition(Bibliotheque.charger(RACINE / "comites"), cfg, cfg["gabarit_defaut"])
+        self.assertEqual({m.id for m in c.membres if m.thinking}, {"president", "contradicteur"})
+        self.assertEqual({m.id: m.modele for m in c.membres},
+                         {"president": "gemma", "strategie": "gemma", "finance": "gemma", "clients": "gemma",
+                          "operations": "gpt_oss", "risques": "gpt_oss", "rh": "gemma", "contradicteur": "gpt_oss"})
 
 if __name__ == "__main__":
     unittest.main()

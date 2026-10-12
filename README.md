@@ -128,6 +128,23 @@ de chaque modèle indique sa famille d'entraînement : avec `famille_differente_
 le contradicteur reçoit un modèle d'une autre lignée que le président lorsqu'il en existe un.
 L'ancien format `agents:` reste accepté.
 
+Chaque séance porte sa propre composition, figée à son ouverture : membres, mandats effectivement
+envoyés, modèles. Deux séances simultanées ne partagent ni comité ni affectation, et le garde-fou
+de confidentialité s'applique aux modèles réellement retenus. Le comité présélectionné pour un dossier
+se déclare dans son `_dossier.yaml` (`gabarit: comex`) ; à défaut, `gabarit_defaut` de `config.yaml`.
+En attendant l'écran de constitution, la composition se choisit par l'API :
+
+```bash
+curl -X POST localhost:8000/api/seances -H 'content-type: application/json' -d '{
+  "dossier": "assistant-ia-2027",
+  "selection": ["finance", "risques", "operations"],
+  "mandats": {"finance": "Concentre-toi sur la trésorerie 2027."},
+  "affectations": {"risques": "gpt_oss"}
+}'
+```
+
+`GET /api/comites` renvoie la bibliothèque (rôles, fonctions, gabarits).
+
 ## Créer un nouveau dossier
 
 1. Créez un répertoire dans `seances/`, par exemple `seances/cloud-souverain/`.
