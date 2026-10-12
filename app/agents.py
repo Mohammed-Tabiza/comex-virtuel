@@ -1,52 +1,28 @@
 """Membres du COMEX, schémas de contribution et construction des prompts."""
 import json
 
-AGENTS = {
-    "president": {
-        "nom": "Président", "titre": "Président et rapporteur", "initiales": "PR",
-        "mandat": "Tu cadres la question, identifies les options et les critères de décision, "
-                  "puis tu restitues fidèlement accords et désaccords. Tu ne transformes jamais une "
-                  "majorité d'avis en preuve, et tu ne tranches pas à la place de l'humain.",
-    },
-    "strategie": {
-        "nom": "Stratégie", "titre": "Stratégie et marché", "initiales": "ST",
-        "mandat": "Alignement stratégique, positionnement concurrentiel, scénarios d'avenir. "
-                  "Question clé : pourquoi cette option plutôt qu'une autre ?",
-    },
-    "finance": {
-        "nom": "Finance", "titre": "Direction financière", "initiales": "FI",
-        "mandat": "Coûts, valeur créée, solidité des hypothèses économiques, sensibilité des résultats. "
-                  "Question clé : à quelles conditions cela devient-il intéressant ?",
-    },
-    "clients": {
-        "nom": "Clients", "titre": "Clients et métiers", "initiales": "CM",
-        "mandat": "Besoin réel des utilisateurs et des clients, qualité de service, adoption. "
-                  "Question clé : quelle valeur concrète pour les utilisateurs ?",
-    },
-    "operations": {
-        "nom": "Opérations", "titre": "Opérations et SI", "initiales": "OP",
-        "mandat": "Faisabilité technique, capacité d'exécution, dépendances, exploitation dans la durée. "
-                  "Question clé : pouvons-nous le réaliser et l'exploiter ?",
-    },
-    "risques": {
-        "nom": "Risques", "titre": "Risques et conformité", "initiales": "RC",
-        "mandat": "Exposition juridique, contractuelle, sécurité et réglementaire, conditions de maîtrise. "
-                  "Question clé : qu'est-ce qui pourrait rendre cette option inacceptable ?",
-    },
-    "rh": {
-        "nom": "RH", "titre": "RH et organisation", "initiales": "RH",
-        "mandat": "Compétences, charge, dialogue social, conduite du changement. "
-                  "Question clé : que doit changer l'organisation pour réussir ?",
-    },
-    "contradicteur": {
-        "nom": "Contradicteur", "titre": "Contradicteur indépendant", "initiales": "CO",
-        "mandat": "Tu remets en cause les hypothèses et recherches les scénarios d'échec. Tu n'es pas "
-                  "là pour être d'accord : ta valeur vient des failles que les autres n'ont pas vues. "
-                  "Question clé : pourquoi la recommandation pourrait-elle être mauvaise ?",
-    },
-}
+from pathlib import Path
 
-EXPERTS = ["strategie", "finance", "clients", "operations", "risques", "rh"]
+from .comites import Bibliotheque
+
+# Membres du comité par défaut (COMEX), lus dans la bibliothèque comites/.
+# Le moteur de séance s'appuie encore sur ces tables ; elles seront remplacées par la composition
+# propre à chaque séance (lot 2).
+BIBLIOTHEQUE = Bibliotheque.charger(Path(__file__).resolve().parent.parent / "comites")
+_GABARIT = BIBLIOTHEQUE.gabarits["comex"]
+
+
+def _agent(role, surcharge=None) -> dict:
+    surcharge = surcharge or {}
+    return {"nom": surcharge.get("nom", role.nom), "titre": surcharge.get("titre", role.titre),
+            "initiales": role.initiales, "mandat": role.mandat_complet()}
+
+
+AGENTS = {"president": _agent(BIBLIOTHEQUE.fonctions["president"], _GABARIT.fonctions.get("president")),
+          **{r: _agent(BIBLIOTHEQUE.roles[r]) for r in _GABARIT.selection_defaut},
+          "contradicteur": _agent(BIBLIOTHEQUE.fonctions["contradicteur"], _GABARIT.fonctions.get("contradicteur"))}
+
+EXPERTS = list(_GABARIT.selection_defaut)
 
 # --------------------------------------------------------------------------- schémas
 _TXT = {"type": "string"}

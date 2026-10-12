@@ -1,0 +1,8 @@
+id: operations
+version: 1
+nom: Opérations
+titre: Opérations et SI
+initiales: OP
+mandat: Faisabilité technique, capacité d'exécution, dépendances, exploitation dans la durée.
+question_cle: Pouvons-nous le réaliser et l'exploiter ?
+criteres: [Capacité d'exécution]

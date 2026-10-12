@@ -26,8 +26,8 @@ def charger_config(chemin: Path | None = None) -> dict:
         config = _substituer(yaml.safe_load(f))
     config["mode"] = os.environ.get("COMEX_MODE", config.get("mode", "simulation"))
 
-    # Contrôles de cohérence : chaque agent doit pointer vers un modèle déclaré
-    for agent_id, reglage in config["agents"].items():
+    # Contrôles de cohérence : chaque agent doit pointer vers un modèle déclaré (ancien format)
+    for agent_id, reglage in (config.get("agents") or {}).items():
         if reglage["modele"] not in config["modeles"]:
             raise ValueError(f"L'agent {agent_id} utilise un modèle inconnu : {reglage['modele']}")
     # Hébergement : sans déclaration explicite, un modèle est considéré comme externe (hypothèse prudente)
@@ -35,6 +35,17 @@ def charger_config(chemin: Path | None = None) -> dict:
         modele["hebergement"] = modele.get("hebergement", "externe")
         if modele["hebergement"] not in HEBERGEMENTS:
             raise ValueError(f"Modèle {nom} : hebergement doit valoir 'interne' ou 'externe'")
+    # Bibliothèque de comités et règles d'affectation des modèles
+    from .comites import Bibliotheque, normaliser_affectation, resoudre_composition
+    config["bibliotheque"] = str(RACINE / config.get("bibliotheque", "comites"))
+    bib = Bibliotheque.charger(Path(config["bibliotheque"]))
+    config["affectation"] = normaliser_affectation(config)
+    config["gabarit_defaut"] = config.get("gabarit_defaut") or ("comex" if "comex" in bib.gabarits else next(iter(bib.gabarits)))
+    if config["gabarit_defaut"] not in bib.gabarits:
+        raise ValueError(f"gabarit_defaut inconnu : {config['gabarit_defaut']}")
+    # Compatibilité : table agent → modèle du comité par défaut, encore lue par le moteur de séance
+    composition = resoudre_composition(bib, config, config["gabarit_defaut"])
+    config["agents"] = {m.id: {"modele": m.modele, "thinking": m.thinking} for m in composition.membres}
     if config["mode"] == "reel":
         for nom in {r["modele"] for r in config["agents"].values()}:
             if not config["modeles"][nom].get("base_url"):

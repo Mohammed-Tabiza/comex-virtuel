@@ -107,6 +107,27 @@ En mode réel, une séance sur un dossier confidentiel est refusée dès qu'un s
 modèle externe : le bouton est désactivé dans l'interface et l'API répond 403. L'en-tête affiche en
 permanence le statut du dossier et l'hébergement des modèles. Le mode simulation n'envoie aucune donnée.
 
+## Bibliothèque des comités et affectation des modèles
+
+Les membres ne sont plus codés en dur : ils sont décrits dans `comites/`.
+
+```
+comites/fonctions/   président (ou animateur) et contradicteur, présents dans tous les comités
+comites/roles/       une expertise par fichier : mandat, question clé, critères portés, version
+comites/gabarits/    un type de comité : rôles obligatoires et optionnels, présélection, taille, critères
+```
+
+Chaque fichier porte une `version` : incrémentez-la quand vous modifiez un mandat, pour savoir
+quelle consigne a produit quel avis. Le chargement vérifie la cohérence de la bibliothèque
+(identifiants, rôles inconnus, présélection entre `experts.min` et `experts.max`, au plus 6 experts).
+
+L'affectation des modèles se fait par règles dans `config.yaml`, section `affectation` :
+modèle du président, du contradicteur, liste des modèles répartis à tour de rôle entre les experts,
+exceptions par rôle (`par_role`) et membres en mode réflexion (`thinking`). Le champ `lignee`
+de chaque modèle indique sa famille d'entraînement : avec `famille_differente_contradicteur: preference`,
+le contradicteur reçoit un modèle d'une autre lignée que le président lorsqu'il en existe un.
+L'ancien format `agents:` reste accepté.
+
 ## Créer un nouveau dossier
 
 1. Créez un répertoire dans `seances/`, par exemple `seances/cloud-souverain/`.
