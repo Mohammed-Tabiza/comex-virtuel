@@ -191,6 +191,28 @@ class RevisionTests(unittest.TestCase):
                 self.assertEqual(r.status_code, 409)
         asyncio.run(scenario())
 
+    def test_la_revision_conserve_modeles_et_mandats_des_membres_gardes(self):
+        async def scenario():
+            async with FakeSeance(config_simulation()) as f:
+                r = await f.client.post("/api/seances", json={"dossier": "assistant-ia-2027",
+                                                              "mandats": {"operations": "Mandat Ops ad hoc."}})
+                sid = r.json()["seance_id"]
+                seance = await f.attendre(sid, "attente_validation")
+                avant = {m.id: m.modele for m in seance.composition.membres}
+                # Retrait de Stratégie : sans conservation, le tour de rôle décalerait les modèles des suivants
+                await f.client.post(f"/api/seances/{sid}/validation", json={"action": "valider", "composition_revisee": {
+                    "selection": ["finance", "clients", "operations", "risques", "rh"]}})
+                seance = await f.attendre(sid, "terminee", "erreur")
+                apres = {m.id: m.modele for m in seance.composition.membres}
+                self.assertEqual(apres, {k: v for k, v in avant.items() if k != "strategie"})
+                self.assertEqual(seance.composition.membre("operations").mandat, "Mandat Ops ad hoc.")
+                self.assertEqual(seance.revisions[0]["modeles"], {})
+                self.assertEqual(seance.revisions[0]["mandats"], [])
+        cfg = config_simulation()
+        cfg["affectation"]["par_role"] = {}                     # tour de rôle pur : le cas le plus exposé
+        with patch("tests.test_protocole.config_simulation", lambda **k: cfg):
+            asyncio.run(scenario())
+
     def test_revision_bloquee_si_elle_viole_la_confidentialite(self):
         cfg = config_simulation()
         cfg["mode"] = "reel"

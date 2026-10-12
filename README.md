@@ -148,7 +148,15 @@ Chaque séance porte sa propre composition, figée à son ouverture : membres, m
 envoyés, modèles. Deux séances simultanées ne partagent ni comité ni affectation, et le garde-fou
 de confidentialité s'applique aux modèles réellement retenus. Le comité présélectionné pour un dossier
 se déclare dans son `_dossier.yaml` (`gabarit: comex`) ; à défaut, `gabarit_defaut` de `config.yaml`.
-En attendant l'écran de constitution, la composition se choisit par l'API :
+Dans l'interface, **Constituer le comité** ouvre l'écran de constitution : gabarit présélectionné par le
+dossier, membres à cocher (les rôles du gabarit, puis les autres rôles de la bibliothèque), mandat et modèle
+de chaque membre, justification écrite si un rôle obligatoire est retiré. Le panneau de droite évalue la
+composition en continu : nombre d'experts, confidentialité, estimation du contexte et critères usuels couverts.
+**Lancer la séance** n'est actif que pour une composition valide. À la validation du cadrage, le volet
+**Équipe** permet de réviser le comité de la même façon, avec la couverture des critères du cadrage ; le motif
+de la révision est consigné. Autour de la table, les sièges se répartissent selon le nombre de membres.
+
+La composition peut aussi se choisir par l'API :
 
 ```bash
 curl -X POST localhost:8000/api/seances -H 'content-type: application/json' -d '{

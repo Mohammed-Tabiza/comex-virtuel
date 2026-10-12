@@ -386,10 +386,16 @@ async def valider(seance_id: str, corps: Validation):
         # Révision de l'équipe : ajouter un expert ne demande pas de nouveau cadrage ; modifier options,
         # contraintes ou critères passe par « recadrer ». L'équipe devient définitive avant les analyses.
         r = corps.composition_revisee
+        # Les membres conservés gardent leur modèle et leur mandat, sauf changement explicite
+        ancienne = seance.composition
+        gardes = set(r.selection) | {"president", "contradicteur"}
+        mandats = {m.id: m.mandat for m in ancienne.membres if m.mandat_modifie and m.id in gardes} | (r.mandats or {})
+        conserves = {m.id: (m.modele, m.note_affectation) for m in ancienne.membres if m.id in gardes}
+        retraits = {k: v for k, v in ancienne.retraits_justifies.items() if k not in r.selection} | (r.retraits_justifies or {})
         try:
-            nouvelle = resoudre_composition(_bibliotheque(), ETAT["config"], seance.composition.gabarit_id,
-                                            selection=r.selection, mandats=r.mandats, affectations=r.affectations,
-                                            retraits_justifies=r.retraits_justifies)
+            nouvelle = resoudre_composition(_bibliotheque(), ETAT["config"], ancienne.gabarit_id,
+                                            selection=r.selection, mandats=mandats, affectations=r.affectations,
+                                            retraits_justifies=retraits, conserves=conserves)
         except ErreurComposition as e:
             raise HTTPException(422, {"code": "composition", "message": str(e), "erreurs": e.erreurs})
         _verifier(seance.dossier, nouvelle)

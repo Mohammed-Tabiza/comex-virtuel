@@ -315,14 +315,17 @@ def resoudre_composition(bib: Bibliotheque, config: dict, gabarit_id: str, *,
                          selection: list[str] | None = None,
                          mandats: dict[str, str] | None = None,
                          affectations: dict[str, str] | None = None,
-                         retraits_justifies: dict[str, str] | None = None) -> Composition:
+                         retraits_justifies: dict[str, str] | None = None,
+                         conserves: dict[str, tuple[str, str]] | None = None) -> Composition:
     """Construit la composition d'une séance à partir d'un gabarit et des choix du décideur.
 
     - selection : experts retenus (par défaut la présélection du gabarit), dans l'ordre d'affichage ;
       tout rôle d'expert de la bibliothèque est accepté, le gabarit n'étant qu'une présélection ;
     - mandats : texte de mandat remplaçant celui de la bibliothèque, par membre ;
     - affectations : modèle imposé, par membre ;
-    - retraits_justifies : justification écrite pour chaque rôle obligatoire retiré.
+    - retraits_justifies : justification écrite pour chaque rôle obligatoire retiré ;
+    - conserves : modèle et note d'affectation à conserver, par membre (révision d'une équipe existante :
+      retirer un membre ne doit pas déplacer les modèles des autres par le jeu du tour de rôle).
     """
     if gabarit_id not in bib.gabarits:
         raise ErreurComposition([f"Gabarit inconnu : {gabarit_id}"])
@@ -330,6 +333,7 @@ def resoudre_composition(bib: Bibliotheque, config: dict, gabarit_id: str, *,
     selection = list(gabarit.selection_defaut if selection is None else selection)
     mandats = {k: v for k, v in (mandats or {}).items()}
     affectations = dict(affectations or {})
+    conserves = dict(conserves or {})
     retraits = {k: str(v).strip() for k, v in (retraits_justifies or {}).items() if str(v).strip()}
     regle = normaliser_affectation(config)
     erreurs = []
@@ -367,6 +371,8 @@ def resoudre_composition(bib: Bibliotheque, config: dict, gabarit_id: str, *,
         texte = " ".join(str(mandats[role.id]).split()) if role.id in mandats else bibliotheque
         if role.id in affectations:
             modele, note = affectations[role.id], "Modèle choisi par le décideur."
+        elif role.id in conserves and conserves[role.id][0] in config["modeles"]:
+            modele, note = conserves[role.id]
         return Membre(id=role.id, fonction=fonction, role_id=role.id, role_version=role.version,
                       nom=str(surcharge.get("nom", role.nom)), titre=str(surcharge.get("titre", role.titre)),
                       initiales=str(surcharge.get("initiales", role.initiales)), mandat=texte,

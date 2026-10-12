@@ -186,6 +186,48 @@ textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--
 .porteur{border:1px solid var(--line-2);border-radius:999px;padding:0 7px;font-size:11px;color:var(--muted)}
 .porteur.aucun{border-color:rgba(242,193,78,.6);color:var(--warn)}
 
+/* constitution et révision de l'équipe */
+.constit{position:fixed;inset:0;background:rgba(8,10,14,.62);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:15;padding:20px}
+.constit.on{display:flex}
+.fenetre.large{max-width:1100px;padding:0;display:flex;flex-direction:column;max-height:100%}
+.fl-tete{padding:18px 22px 12px;border-bottom:1px solid var(--line)}
+.fl-corps{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(270px,1fr);min-height:0;flex:1}
+.fl-gauche{padding:14px 22px;overflow-y:auto;border-right:1px solid var(--line)}
+.fl-droite{padding:14px 18px;overflow-y:auto;background:var(--bg)}
+.fl-pied{padding:12px 22px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.fl-pied .info{margin-right:auto;font-size:12.5px;color:var(--muted)}
+.gabarit-choix{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.gabarit-choix .desc{font-size:12.5px;color:var(--muted);flex:1;min-width:200px}
+.ed-titre{font-size:11px;text-transform:uppercase;letter-spacing:.9px;color:var(--faint);margin:14px 0 6px;font-weight:600;cursor:default}
+details > summary.ed-titre{cursor:pointer}
+.membre-ligne{border:1px solid var(--line);border-radius:10px;padding:7px 10px;margin-bottom:6px;background:var(--panel-2);transition:opacity .2s}
+.membre-ligne.off{opacity:.6;background:transparent}
+.ml-haut{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ml-haut input[type=checkbox]{width:16px;height:16px;accent-color:var(--brass);flex:none}
+.avatar.mini{width:26px;height:26px;font-size:10.5px;border-width:1.2px}
+.ml-titre{flex:1;min-width:150px;line-height:1.25}
+.ml-titre b{font-size:13px;font-weight:600}
+.ml-crit{font-size:11px;color:var(--faint)}
+.badge{font-size:10.5px;border:1px solid var(--line-2);border-radius:999px;padding:0 7px;color:var(--muted);white-space:nowrap}
+.badge.oblig{color:var(--brass);border-color:rgba(201,162,92,.5)}
+.badge.modif{color:var(--think);border-color:rgba(180,140,255,.5)}
+select.mini{min-width:0;padding:3px 6px;font-size:12px;max-width:230px}
+.btn.lien{background:none;border:0;color:var(--brass);padding:2px 0;font-weight:500;font-size:12px;cursor:pointer}
+.ml-mandat{margin-top:8px}
+.ml-mandat textarea{min-height:70px;font-size:12.5px}
+input.justif,input.motif{width:100%;margin-top:7px;background:var(--bg);border:1px solid rgba(242,193,78,.55);border-radius:8px;padding:7px 9px;font:inherit;font-size:12.5px;color:var(--text)}
+input.motif{border-color:var(--line-2)}
+.re-bloc{margin-bottom:14px}
+.re-bloc h4{font-size:11px;text-transform:uppercase;letter-spacing:.9px;color:var(--faint);margin:0 0 6px;font-weight:600}
+.re-chiffre{font-family:var(--serif);font-size:26px;line-height:1}
+.jauge{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:6px 0 4px}
+.jauge i{display:block;height:100%;border-radius:99px;transition:width .3s}
+.etat-ok{color:var(--ok)} .etat-attention{color:var(--warn)} .etat-depassement{color:var(--err)}
+.bloque{border-left-color:var(--err);background:rgba(255,107,107,.08)}
+details.equipe{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+details.equipe > summary{cursor:pointer;font-size:13px;font-weight:600}
+details.equipe .fl-corps{display:block}
+
 /* section citée */
 .pop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,10,14,.55);z-index:20;padding:20px}
 .pop.on{display:flex}
@@ -204,6 +246,12 @@ textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--
   .siege.actif{transform:none}
   svg.liens{display:none}
   .legende{position:static;padding:0 16px 14px}
+  .constit{padding:0;align-items:stretch}
+  .fenetre.large{max-height:none;height:100%;border-radius:0;overflow-y:auto;display:block}
+  .fl-corps{display:block}
+  .fl-gauche,.fl-droite{overflow:visible;border-right:0}
+  .fl-gauche{border-bottom:1px solid var(--line)}
+  .fl-pied{position:sticky;bottom:0;background:var(--panel)}
   aside{min-height:70vh}
   header{flex-wrap:wrap}
 }
@@ -263,12 +311,12 @@ textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--
   </main>
 </div>
 
+<div class="constit" id="constit" role="dialog" aria-modal="true" aria-label="Constitution du comité"><div class="fenetre large" id="fenConstit"></div></div>
 <div class="pop" id="pop" role="dialog" aria-modal="true" aria-label="Passage cité" tabindex="-1"><div class="fenetre" id="popContenu"></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
 // Positions des sièges autour de la table (angle en degrés, 0 = droite, 90 = bas)
-const ANGLES = {president:-90, strategie:-38, finance:5, clients:47, contradicteur:90, operations:133, risques:175, rh:-142};
 const RX = 36.5, RY = 41;   // rayons de l'ellipse des sièges, en % de la zone
 const PHASES = [["cadrage","Cadrage"],["validation","Validation humaine"],["analyses","Analyses indépendantes"],
   ["contradiction","Contradiction"],["reponses","Réponses"],["synthese","Synthèse"],["arbitrage","Arbitrage"]];
@@ -299,13 +347,14 @@ const nomAgent = id => S.config.agents[id]?.nom || id;
 // ------------------------------------------------------------------ initialisation
 async function init() {
   S.config = S.configLive = await (await fetch("/api/config")).json();
+  S.catalogue = await (await fetch("/api/comites")).json();
   definirCouleurs(); majChipMode();
 
   const dossiers = await (await fetch("/api/dossiers")).json();
   $("#choixDossier").innerHTML = dossiers.map(d => `<option>${esc(d)}</option>`).join("");
   $("#choixDossier").onchange = chargerDossier;
   $("#choixRejeu").onchange = majBouton;
-  $("#btnLancer").onclick = lancer;
+  $("#btnLancer").onclick = demarrer;
 
   $("#etapes").innerHTML = PHASES.map(([id, l]) => `<div class="etape" data-ph="${id}"><span class="pt"></span>${l}</div>`).join("");
   majLegende();
@@ -317,6 +366,7 @@ async function init() {
   });
   $("#pop").onclick = e => { if (e.target.id === "pop" || e.target.closest("[data-fermer-source]")) fermerSection(); };
   document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && $("#constit").classList.contains("on") && !$("#pop").classList.contains("on")) return fermerConstitution();
     if (!$("#pop").classList.contains("on")) return;
     if (e.key === "Escape") { e.preventDefault(); fermerSection(); }
     if (e.key === "Tab") {
@@ -354,15 +404,36 @@ function majChipMode() {
   mode.className = "chip " + (S.config.mode === "reel" ? (externe ? "sim" : "reel") : "sim");
 }
 
+// Sièges répartis selon la composition : l'animateur en haut, le contradicteur en bas,
+// les experts de part et d'autre de la table, dans l'ordre du comité (sens horaire).
+// Angles d'un côté de la table, de haut en bas : ils évitent la bande centrale où s'affiche la question.
+const ANGLES_COTE = {1: [0], 2: [-40, 40], 3: [-40, 4, 46]};
+const anglesCote = k => ANGLES_COTE[k] || Array.from({length: k}, (_, i) => -60 + 120 * i / (k - 1));
+
+function positionSiege(id) {
+  const experts = S.config.experts || [];
+  let angle = -90;
+  if (id === "contradicteur") angle = 90;
+  else if (id !== "president") {
+    const i = Math.max(0, experts.indexOf(id)), n = experts.length, droite = Math.ceil(n / 2);
+    angle = i < droite ? anglesCote(droite)[i]                                    // côté droit, de haut en bas
+                       : 180 - [...anglesCote(n - droite)].reverse()[i - droite]; // côté gauche, de bas en haut
+  }
+  const a = angle * Math.PI / 180;
+  return [50 + RX * Math.cos(a), 50 + RY * Math.sin(a)];
+}
+
 function creerSieges() {
   const zone = $("#zone");
   zone.querySelectorAll(".siege").forEach(n => n.remove());
-  for (const [id, a] of Object.entries(S.config.agents)) {
-    const ang = ANGLES[id] * Math.PI / 180;
+  const ordre = ["president", ...(S.config.experts || []), "contradicteur"].filter(id => S.config.agents[id]);
+  for (const id of ordre) {
+    const a = S.config.agents[id];
+    const [x, y] = positionSiege(id);
     const el = document.createElement("div");
     el.className = "siege"; el.id = "siege-" + id;
-    el.style.left = (50 + RX * Math.cos(ang)) + "%";
-    el.style.top = (50 + RY * Math.sin(ang)) + "%";
+    el.style.left = x + "%";
+    el.style.top = y + "%";
     el.style.setProperty("--c", couleur(id));
     el.innerHTML = `<div class="s-haut"><div class="avatar">${esc(a.initiales)}</div>
         <div><div class="s-nom">${esc(a.titre)}</div><div class="s-mod">${esc(a.libelle_modele)}${a.thinking ? " · thinking" : ""}</div></div></div>
@@ -402,11 +473,9 @@ async function chargerRejeux(selection = "") {
 function majBouton() {
   const rejeu = !!$("#choixRejeu").value, bouton = $("#btnLancer");
   $("#vitesse").hidden = !rejeu;
-  bouton.textContent = rejeu ? "Rejouer la séance" : "Ouvrir la séance";
-  const blocage = !rejeu && S.dossier?.blocage;
-  bouton.disabled = !!blocage;
-  bouton.title = blocage ? blocage.message : "";
-  if (blocage) toast(blocage.message);
+  bouton.textContent = rejeu ? "Rejouer la séance" : "Constituer le comité";
+  bouton.disabled = false;
+  bouton.title = rejeu ? "" : "Choisir les membres, leurs mandats et leurs modèles avant de lancer la séance";
 }
 
 function majTokens(n, budget) {
@@ -434,18 +503,24 @@ function reinitialiser(config) {
   S.timer = setInterval(() => { const s = Math.floor((Date.now() - debut) / 1000); $("#chipChrono").textContent = `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; }, 500);
 }
 
-async function lancer() {
+function demarrer() {
   const rejeu = $("#choixRejeu").value;
-  if (rejeu) return rejouer(rejeu);
+  return rejeu ? rejouer(rejeu) : ouvrirConstitution();
+}
+
+async function lancer(demande = {}) {
   S.rejeu = null;
   reinitialiser(S.configLive); majChipMode();
   $("#btnLancer").disabled = true;
   $("#choixDossier").disabled = true;
-  const r = await fetch("/api/seances", {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({dossier: $("#choixDossier").value})});
+  const r = await fetch("/api/seances", {method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify({dossier: $("#choixDossier").value, ...demande})});
   if (!r.ok) {
     const detail = (await r.json().catch(() => ({}))).detail;
     toast(detail?.message || "Impossible d'ouvrir la séance");
-    clearInterval(S.timer); $("#btnLancer").disabled = false; $("#choixDossier").disabled = false; return;
+    clearInterval(S.timer); $("#btnLancer").disabled = false; $("#choixDossier").disabled = false;
+    $("#question").textContent = "Choisissez un dossier et ouvrez la séance.";
+    return;
   }
   S.seance = (await r.json()).seance_id;
   S.source = new EventSource(`/api/seances/${S.seance}/evenements`);
@@ -478,7 +553,10 @@ function traiter(e) {
   switch (e.type) {
     case "dossier_charge": majTokens(e.dossier.tokens_estimes, e.budget);
       // Chaque séance a son comité : les experts affichés sont ceux de la séance, pas ceux du comité par défaut
-      if (e.comite) { S.config = {...S.config, agents: e.comite.agents, experts: e.comite.experts}; }
+      if (e.comite) {
+        S.config = {...S.config, agents: e.comite.agents, experts: e.comite.experts};
+        definirCouleurs(); majLegende(); creerSieges(); dessinerLiens(); majChipMode();
+      }
       if (e.contexte && e.contexte.niveau !== "ok") note(texteContexte(e.contexte));
       if (e.depassement) note("Le dossier dépasse le budget de contexte configuré : les agents servis par les plus petits modèles risquent d'être tronqués."); break;
     case "phase": phase(e.phase); break;
@@ -591,7 +669,7 @@ function note(texte, complement) {
 function dessinerLiens() {
   const svg = $("#liens");
   const cibles = S.liens || [];
-  const pt = id => { const a = ANGLES[id] * Math.PI / 180; return [50 + RX * Math.cos(a), 50 + RY * Math.sin(a)]; };
+  const pt = positionSiege;
   const [x1, y1] = pt("contradicteur");
   svg.innerHTML = [...new Set(cibles)].map(c => { const [x2, y2] = pt(c); return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" vector-effect="non-scaling-stroke"/>`; }).join("");
 }
@@ -636,8 +714,13 @@ function ouvrirValidation(c, e = {}) {
       <p style="color:var(--muted)">${avecRefs(c.decision_attendue)}</p>
       ${liste("Options", c.options, o => `<b>${esc(o.id)}</b> · ${esc(o.nom)} : ${avecRefs(o.description)}`)}
       ${e.couverture ? "" : liste("Critères de décision", c.criteres)}${liste("Contraintes", c.contraintes)}${liste("Informations manquantes", c.informations_manquantes)}
-      ${blocCouverture(e)}</div>
+      ${S.rejeu || !e.comite || !S.catalogue ? blocCouverture(e) : ""}</div>
     ${c.questions_pour_humain?.length ? `<h4 style="font-size:12px;color:var(--warn);margin:12px 0 4px">${manque ? "Informations indispensables" : "Questions du président"}</h4>${c.questions_pour_humain.map(q => `<div class="alerte-q">${avecRefs(q)}</div>`).join("")}` : ""}
+    ${!S.rejeu && e.comite && S.catalogue ? `<details class="equipe" ${e.criteres_sans_porteur?.length ? "open" : ""}>
+      <summary>Équipe : ${e.comite.experts.length} experts${e.criteres_sans_porteur?.length ? ` · ${e.criteres_sans_porteur.length} critère${e.criteres_sans_porteur.length > 1 ? "s" : ""} sans porteur` : ""} · réviser (facultatif)</summary>
+      <div class="sous" style="margin-top:6px">Ajouter ou retirer un expert ne relance pas le cadrage. Pour changer options, contraintes ou critères, demandez un nouveau cadrage.</div>
+      <div class="fl-corps"><div id="editeur"></div><div id="resumeEquipe"></div></div>
+      <input class="motif" id="motif" placeholder="Motif de la révision (consigné dans le compte rendu)" hidden></details>` : ""}
     <h4 style="font-size:12px;color:var(--muted);margin:14px 0 6px">Vos précisions (transmises à tous les membres)</h4>
     <textarea id="complement" placeholder="Ex. : la renégociation avec l'éditeur est exclue ; un prestataire peut être financé sur le budget run…"></textarea>
     <div class="actions"><button class="btn" id="btnValider">Valider et lancer les analyses</button>
@@ -650,13 +733,236 @@ function ouvrirValidation(c, e = {}) {
   }
   $("#btnValider").onclick = () => envoyerValidation("valider");
   $("#btnRecadrer").onclick = () => envoyerValidation("recadrer");
+  if (e.comite && S.catalogue) {
+    const agents = e.comite.agents;
+    E = {mode: "revision", gabarit: e.comite.gabarit.id, selection: [...e.comite.experts], cadrage: c, ouvert: null,
+         mandats: Object.fromEntries(Object.entries(agents).filter(([, a]) => a.mandat_modifie).map(([k, a]) => [k, a.mandat])),
+         affectations: {}, retraits: {...(e.comite.retraits_justifies || {})},
+         conserves: Object.fromEntries(Object.entries(agents).map(([k, a]) => [k, a.modele]))};
+    E.initial = signatureEquipe();
+    brancherEditeur(); rendreEditeur(); evaluerEquipe();
+  }
 }
 
 async function envoyerValidation(action) {
   const complement = $("#complement").value.trim();
   if (action === "recadrer" && !complement) { $("#complement").focus(); return toast("Indiquez ce que le président doit prendre en compte."); }
+  const corps = {action, complement};
+  if (E?.mode === "revision" && equipeModifiee()) {
+    if (E.resultat && !E.resultat.valide) return toast("L'équipe révisée n'est pas valide : " + E.resultat.erreurs.join(" ; "));
+    const d = demandeEquipe();
+    corps.composition_revisee = {selection: d.selection, mandats: d.mandats, affectations: d.affectations,
+                                 retraits_justifies: d.retraits_justifies, motif: $("#motif")?.value.trim() || ""};
+  }
   $("#btnLancer").disabled = true;
-  await fetch(`/api/seances/${S.seance}/validation`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({action, complement})});
+  const r = await fetch(`/api/seances/${S.seance}/validation`, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(corps)});
+  if (!r.ok) {
+    const detail = (await r.json().catch(() => ({}))).detail;
+    toast(detail?.message || (typeof detail === "string" ? detail : "Validation refusée"));
+  }
+}
+
+// ------------------------------------------------------------------ équipe : constitution et révision
+// Un même éditeur sert avant le lancement (constitution) et à la validation (révision). Le serveur
+// reste juge : chaque modification est évaluée par POST /api/dossiers/<nom>/composition.
+const FONCTIONS = ["president", "contradicteur"];
+let E = null, minuterieEquipe = null, requeteEquipe = 0;
+const espaces = t => String(t || "").split(/\s+/).filter(Boolean).join(" ");
+const normaliser = t => espaces(String(t || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/'/g, " "));
+const roleBib = id => S.catalogue.fonctions[id] || S.catalogue.roles[id];
+const couleurModele = m => COULEURS[m] || "var(--faint)";
+
+function ouvrirConstitution() {
+  if (!S.dossier || !S.catalogue) return;
+  const gabarit = S.catalogue.gabarits[S.dossier.gabarit] ? S.dossier.gabarit : S.configLive.gabarit_defaut?.id;
+  E = {mode: "constitution", gabarit, selection: [...S.catalogue.gabarits[gabarit].selection_defaut],
+       mandats: {}, affectations: {}, retraits: {}, conserves: {}, ouvert: null};
+  const gabarits = Object.values(S.catalogue.gabarits);
+  $("#fenConstit").innerHTML = `
+    <div class="fl-tete"><h2>Constituer le comité</h2>
+      <div class="sous" style="margin:0">${esc(S.dossier.nom)}${S.dossier.description ? " · " + esc(S.dossier.description) : ""}.
+        Le protocole est le même pour tous les comités ; seuls les membres, leurs mandats et leurs modèles changent.</div>
+      <div class="gabarit-choix"><select id="choixGabarit" aria-label="Type de comité">${gabarits.map(g =>
+        `<option value="${esc(g.id)}" ${g.id === gabarit ? "selected" : ""}>${esc(g.nom)}</option>`).join("")}</select>
+        <span class="desc" id="descGabarit"></span></div></div>
+    <div class="fl-corps"><div class="fl-gauche" id="editeur"></div><div class="fl-droite" id="resumeEquipe"></div></div>
+    <div class="fl-pied"><span class="info" id="infoConstit"></span>
+      <button class="btn sec" id="btnAnnulerConstit">Annuler</button>
+      <button class="btn" id="btnLancerSeance" disabled>Lancer la séance</button></div>`;
+  $("#choixGabarit").onchange = () => {
+    E.gabarit = $("#choixGabarit").value;
+    Object.assign(E, {selection: [...S.catalogue.gabarits[E.gabarit].selection_defaut], mandats: {}, affectations: {}, retraits: {}, ouvert: null});
+    rendreEditeur(); evaluerEquipe();
+  };
+  $("#btnAnnulerConstit").onclick = fermerConstitution;
+  $("#btnLancerSeance").onclick = () => { const d = demandeEquipe(); fermerConstitution(); lancer(d); };
+  $("#constit").classList.add("on");
+  brancherEditeur(); rendreEditeur(); evaluerEquipe();
+  $("#choixGabarit").focus();
+}
+
+function fermerConstitution() {
+  $("#constit").classList.remove("on");
+  $("#fenConstit").innerHTML = "";                  // un seul éditeur présent dans la page
+  if (E?.mode === "constitution") E = null;
+}
+
+function brancherEditeur() {
+  const z = $("#editeur"); if (!z) return;
+  z.addEventListener("change", ev => {
+    const t = ev.target;
+    if (t.dataset.coche) {
+      const id = t.dataset.coche;
+      E.selection = t.checked ? [...E.selection, id] : E.selection.filter(x => x !== id);
+      if (!t.checked && E.ouvert === id) E.ouvert = null;
+      rendreEditeur(); evaluerEquipe();
+    } else if (t.dataset.modele) {
+      E.affectations[t.dataset.modele] = t.value; rendreEditeur(); evaluerEquipe();
+    } else if (t.dataset.texte) {
+      rendreEditeur();                                // badge « mandat modifié » à jour après la saisie
+    }
+  });
+  z.addEventListener("input", ev => {
+    const t = ev.target;
+    if (t.dataset.texte) {
+      const id = t.dataset.texte;
+      if (espaces(t.value) === espaces(roleBib(id).mandat_complet)) delete E.mandats[id]; else E.mandats[id] = t.value;
+      evaluerEquipe();
+    } else if (t.dataset.justif) { E.retraits[t.dataset.justif] = t.value; evaluerEquipe(); }
+  });
+  z.addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    if (b.dataset.mandat) { E.ouvert = E.ouvert === b.dataset.mandat ? null : b.dataset.mandat; rendreEditeur();
+      if (E.ouvert) z.querySelector(`[data-texte="${E.ouvert}"]`)?.focus(); }
+    if (b.dataset.retablir) { delete E.mandats[b.dataset.retablir]; rendreEditeur(); evaluerEquipe(); }
+  });
+}
+
+function modeleDe(id) {
+  return E.affectations[id] || E.conserves[id] || E.resultat?.comite?.agents?.[id]?.modele || E.derniers?.[id] || "";
+}
+
+function htmlLigne(id) {
+  const g = S.catalogue.gabarits[E.gabarit], role = roleBib(id), fonction = FONCTIONS.includes(id);
+  const actif = fonction || E.selection.includes(id);
+  const oblig = g.obligatoires.includes(id), hors = !fonction && ![...g.obligatoires, ...g.optionnels].includes(id);
+  const titre = fonction ? (g.fonctions?.[id]?.titre || role.titre) : role.titre;
+  const modele = modeleDe(id), modifie = E.mandats[id] !== undefined;
+  const options = Object.entries(S.configLive.modeles).map(([m, x]) =>
+    `<option value="${esc(m)}" ${m === modele ? "selected" : ""}>${esc(x.libelle)}${x.hebergement === "interne" ? " (interne)" : " (externe)"}</option>`).join("");
+  return `<div class="membre-ligne ${actif ? "" : "off"}" data-id="${esc(id)}">
+    <div class="ml-haut">
+      ${fonction ? "" : `<input type="checkbox" data-coche="${esc(id)}" ${actif ? "checked" : ""} aria-label="Faire siéger ${esc(titre)}">`}
+      <span class="avatar mini" style="--c:${actif ? couleurModele(modele) : "var(--faint)"}">${esc(role.initiales)}</span>
+      <div class="ml-titre"><b>${esc(titre)}</b>
+        <div class="ml-crit">${fonction ? (id === "president" ? "Cadrage et synthèse" : "Contre-analyse, objections, critique de la composition") : (role.criteres || []).map(esc).join(" · ")}</div></div>
+      ${oblig ? `<span class="badge oblig">obligatoire</span>` : ""}${hors ? `<span class="badge">hors gabarit</span>` : ""}${modifie ? `<span class="badge modif">mandat modifié</span>` : ""}
+      ${actif ? `<select class="mini" data-modele="${esc(id)}" aria-label="Modèle de ${esc(titre)}">${options}</select>
+        <button type="button" class="btn lien" data-mandat="${esc(id)}" aria-expanded="${E.ouvert === id}">${E.ouvert === id ? "Fermer" : "Mandat"}</button>` : ""}
+    </div>
+    ${actif && E.ouvert === id ? `<div class="ml-mandat"><textarea data-texte="${esc(id)}" aria-label="Mandat de ${esc(titre)}">${esc(E.mandats[id] ?? role.mandat_complet)}</textarea>
+      ${modifie ? `<button type="button" class="btn lien" data-retablir="${esc(id)}">Rétablir le mandat de la bibliothèque (version ${role.version})</button>` : ""}</div>` : ""}
+    ${oblig && !actif ? `<input class="justif" data-justif="${esc(id)}" placeholder="Rôle obligatoire : justifiez son retrait par écrit" value="${esc(E.retraits[id] || "")}" aria-label="Justification du retrait de ${esc(titre)}">` : ""}
+  </div>`;
+}
+
+function rendreEditeur() {
+  const z = $("#editeur"); if (!z || !E) return;
+  const g = S.catalogue.gabarits[E.gabarit];
+  const duGabarit = [...g.obligatoires, ...g.optionnels];
+  // Les experts siégeant d'abord, dans l'ordre du comité, puis les autres rôles du gabarit
+  const experts = [...E.selection.filter(id => duGabarit.includes(id)), ...duGabarit.filter(id => !E.selection.includes(id))];
+  const autres = Object.keys(S.catalogue.roles).filter(r => !duGabarit.includes(r));
+  z.innerHTML = `<h4 class="ed-titre">Fonctions du protocole</h4>${FONCTIONS.map(htmlLigne).join("")}
+    <h4 class="ed-titre">Experts du gabarit « ${esc(g.nom)} »</h4>${experts.map(htmlLigne).join("")}
+    ${autres.length ? `<details ${autres.some(r => E.selection.includes(r)) ? "open" : ""}><summary class="ed-titre">Autres rôles de la bibliothèque (${autres.length})</summary>${autres.map(htmlLigne).join("")}</details>` : ""}`;
+  if ($("#descGabarit")) $("#descGabarit").textContent = g.description || "";
+  if ($("#motif")) $("#motif").hidden = !equipeModifiee();
+}
+
+function demandeEquipe() {
+  const g = S.catalogue.gabarits[E.gabarit], garder = new Set([...E.selection, ...FONCTIONS]);
+  const filtre = o => Object.fromEntries(Object.entries(o).filter(([k]) => garder.has(k)));
+  return {gabarit: E.gabarit, selection: [...E.selection], mandats: filtre(E.mandats), affectations: filtre(E.affectations),
+          retraits_justifies: Object.fromEntries(Object.entries(E.retraits).filter(([k, v]) =>
+            g.obligatoires.includes(k) && !E.selection.includes(k) && v.trim()))};
+}
+const signatureEquipe = () => JSON.stringify(demandeEquipe());
+const equipeModifiee = () => E?.mode === "revision" && signatureEquipe() !== E.initial;
+
+function evaluerEquipe() { clearTimeout(minuterieEquipe); minuterieEquipe = setTimeout(evaluerMaintenant, 200); }
+
+async function evaluerMaintenant() {
+  if (!E) return;
+  const n = ++requeteEquipe, d = demandeEquipe();
+  // En révision, les membres gardés conservent leur modèle : l'évaluation doit le refléter
+  if (E.mode === "revision") d.affectations = {...Object.fromEntries(Object.entries(E.conserves).filter(([k]) =>
+    d.selection.includes(k) || FONCTIONS.includes(k))), ...d.affectations};
+  const r = await fetch(`/api/dossiers/${encodeURIComponent(S.dossier.nom)}/composition`, {method: "POST",
+    headers: {"content-type": "application/json"}, body: JSON.stringify({dossier: S.dossier.nom, ...d})});
+  if (n !== requeteEquipe || !E) return;
+  E.resultat = await r.json();
+  if (E.resultat.comite) E.derniers = Object.fromEntries(Object.entries(E.resultat.comite.agents).map(([k, a]) => [k, a.modele]));
+  document.querySelectorAll("#editeur [data-modele]").forEach(sel => { sel.value = modeleDe(sel.dataset.modele); });
+  document.querySelectorAll("#editeur .membre-ligne:not(.off) .avatar").forEach(av => {
+    av.style.setProperty("--c", couleurModele(modeleDe(av.closest(".membre-ligne").dataset.id))); });
+  rendreResume();
+}
+
+function jaugeContexte(x) {
+  const p = x.plus_exigeante, pct = Math.min(100, Math.round(p.taux * 100));
+  const couleurs = {ok: "var(--ok)", attention: "var(--warn)", depassement: "var(--err)"};
+  const libelles = {ok: "Marge suffisante", attention: "Marge réduite", depassement: "Dépassement probable"};
+  return `<div class="re-bloc"><h4>Contexte (estimation prudente)</h4>
+    <div class="etat-${x.niveau}" style="font-weight:600">${libelles[x.niveau]}</div>
+    <div class="jauge"><i style="width:${pct}%;background:${couleurs[x.niveau]}"></i></div>
+    <div class="sous" style="margin:0;font-size:12px">Étape la plus exigeante : ${esc(ETAPES[p.etape] || p.etape)},
+      environ ${p.total.toLocaleString("fr-FR")} tokens pour ${p.contexte_max.toLocaleString("fr-FR")}.
+      Un contrôle réel a lieu avant cette étape, avec compactage si nécessaire.</div></div>`;
+}
+
+function listeCouverture(couv, titre) {
+  const nom = id => roleBib(id)?.nom || id;
+  const manque = Object.values(couv).filter(m => !m.length).length;
+  return `<div class="re-bloc"><h4>${titre}${manque ? ` · <span class="etat-attention">${manque} sans porteur</span>` : ""}</h4>
+    <div class="couverture">${Object.entries(couv).map(([c, membres]) => `<div>${esc(c)}</div><div class="porteurs">${
+      membres.length ? membres.map(m => `<span class="porteur">${esc(nom(m))}</span>`).join("") : `<span class="porteur aucun">sans porteur</span>`}</div>`).join("")}</div></div>`;
+}
+
+// Même règle que le serveur : critères usuels des rôles + porteurs désignés au cadrage, limités aux présents
+function couvertureCadrage() {
+  const cad = E.cadrage || {}, res = {};
+  for (const c of cad.criteres || []) {
+    const cle = normaliser(c);
+    const designes = (cad.porteurs_criteres || []).filter(p => normaliser(p.critere) === cle).flatMap(p => p.membres || []);
+    res[c] = E.selection.filter(id => designes.includes(id) || (S.catalogue.roles[id]?.criteres || []).some(x => normaliser(x) === cle));
+  }
+  return res;
+}
+
+function rendreResume() {
+  const z = $("#resumeEquipe"); if (!z || !E) return;
+  const r = E.resultat || {}, g = S.catalogue.gabarits[E.gabarit], n = E.selection.length;
+  let html = `<div class="re-bloc"><h4>Comité</h4><span class="re-chiffre">${n}</span> expert${n > 1 ? "s" : ""}
+    <span class="sous" style="font-size:12px"> · entre ${g.experts.min} et ${g.experts.max} pour ce gabarit</span></div>`;
+  if (r.erreurs?.length) html += `<div class="re-bloc">${r.erreurs.map(m => `<div class="alerte-q">${esc(m)}</div>`).join("")}</div>`;
+  if (r.blocage) html += `<div class="re-bloc"><div class="alerte-q bloque">${esc(r.blocage.message)}</div></div>`;
+  else if (r.valide) html += `<div class="re-bloc"><h4>Données</h4><div style="font-size:12.5px">${
+    S.configLive.mode !== "reel" ? "Simulation : aucune donnée n'est envoyée à un modèle."
+    : S.dossier.confidentiel ? "Dossier confidentiel : tous les membres utilisent un modèle interne." : "Dossier non confidentiel."}</div></div>`;
+  if (r.contexte) html += jaugeContexte(r.contexte);
+  if (E.mode === "constitution" && r.couverture_usuelle)
+    html += listeCouverture(r.couverture_usuelle, "Critères usuels du gabarit") +
+      `<div class="sous" style="font-size:12px;margin-top:-6px">Indicatif : les critères de la décision sont fixés au cadrage, puis leur couverture est vérifiée à la validation.</div>`;
+  if (E.mode === "revision") html += listeCouverture(couvertureCadrage(), "Couverture des critères du cadrage");
+  z.innerHTML = html;
+  const pret = r.valide && !r.blocage;
+  if ($("#btnLancerSeance")) {
+    $("#btnLancerSeance").disabled = !pret;
+    $("#infoConstit").textContent = pret ? `${n} experts, ${Object.keys(demandeEquipe().mandats).length} mandat(s) modifié(s)` : "Composition à corriger avant le lancement";
+  }
+  if ($("#motif")) $("#motif").hidden = !equipeModifiee();
+  if ($("#btnValider")) $("#btnValider").textContent = equipeModifiee() ? "Valider avec l'équipe révisée" : "Valider et lancer les analyses";
 }
 
 // ------------------------------------------------------------------ fin de séance et décision
@@ -749,7 +1055,7 @@ function rendreArene(final) {
   let arene = vue.querySelector(".arene");
   const signature = options.map(o => o.id).join(",");
   if (!arene || arene.dataset.options !== signature) {
-    vue.innerHTML = `<p class="recit" style="margin-top:0">Chaque point est un membre du COMEX : la colonne indique l'option qu'il préfère, la hauteur sa position.</p>
+    vue.innerHTML = `<p class="recit" style="margin-top:0">Chaque point est un membre du comité : la colonne indique l'option qu'il préfère, la hauteur sa position.</p>
       <div class="arene" data-options="${esc(signature)}">
         ${NIVEAUX.map((n, j) => `<div class="niveau" style="top:${12 + j * 20}%"><span>${NIVEAUX_COURTS[n]}</span></div>`).join("")}
         ${options.map((o, i) => `<div class="couloir" style="left:${19 + i * (79 / options.length)}%"></div>
