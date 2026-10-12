@@ -1,52 +1,11 @@
-"""Membres du COMEX, schémas de contribution et construction des prompts."""
+"""Schémas de contribution et construction des prompts.
+
+Les membres ne sont plus définis ici : chaque séance a sa propre composition (app/comites.py).
+Les prompts reçoivent le membre concerné, et les schémas qui dépendent du comité
+(destinataires des objections) sont construits pour chaque séance par `schemas_seance`.
+"""
+import copy
 import json
-
-AGENTS = {
-    "president": {
-        "nom": "Président", "titre": "Président et rapporteur", "initiales": "PR",
-        "mandat": "Tu cadres la question, identifies les options et les critères de décision, "
-                  "puis tu restitues fidèlement accords et désaccords. Tu ne transformes jamais une "
-                  "majorité d'avis en preuve, et tu ne tranches pas à la place de l'humain.",
-    },
-    "strategie": {
-        "nom": "Stratégie", "titre": "Stratégie et marché", "initiales": "ST",
-        "mandat": "Alignement stratégique, positionnement concurrentiel, scénarios d'avenir. "
-                  "Question clé : pourquoi cette option plutôt qu'une autre ?",
-    },
-    "finance": {
-        "nom": "Finance", "titre": "Direction financière", "initiales": "FI",
-        "mandat": "Coûts, valeur créée, solidité des hypothèses économiques, sensibilité des résultats. "
-                  "Question clé : à quelles conditions cela devient-il intéressant ?",
-    },
-    "clients": {
-        "nom": "Clients", "titre": "Clients et métiers", "initiales": "CM",
-        "mandat": "Besoin réel des utilisateurs et des clients, qualité de service, adoption. "
-                  "Question clé : quelle valeur concrète pour les utilisateurs ?",
-    },
-    "operations": {
-        "nom": "Opérations", "titre": "Opérations et SI", "initiales": "OP",
-        "mandat": "Faisabilité technique, capacité d'exécution, dépendances, exploitation dans la durée. "
-                  "Question clé : pouvons-nous le réaliser et l'exploiter ?",
-    },
-    "risques": {
-        "nom": "Risques", "titre": "Risques et conformité", "initiales": "RC",
-        "mandat": "Exposition juridique, contractuelle, sécurité et réglementaire, conditions de maîtrise. "
-                  "Question clé : qu'est-ce qui pourrait rendre cette option inacceptable ?",
-    },
-    "rh": {
-        "nom": "RH", "titre": "RH et organisation", "initiales": "RH",
-        "mandat": "Compétences, charge, dialogue social, conduite du changement. "
-                  "Question clé : que doit changer l'organisation pour réussir ?",
-    },
-    "contradicteur": {
-        "nom": "Contradicteur", "titre": "Contradicteur indépendant", "initiales": "CO",
-        "mandat": "Tu remets en cause les hypothèses et recherches les scénarios d'échec. Tu n'es pas "
-                  "là pour être d'accord : ta valeur vient des failles que les autres n'ont pas vues. "
-                  "Question clé : pourquoi la recommandation pourrait-elle être mauvaise ?",
-    },
-}
-
-EXPERTS = ["strategie", "finance", "clients", "operations", "risques", "rh"]
 
 # --------------------------------------------------------------------------- schémas
 _TXT = {"type": "string"}
@@ -69,6 +28,8 @@ SCHEMAS = {
         "decision_attendue": _TXT,
         "options": {"type": "array", "items": _obj({"id": _TXT, "nom": _TXT, "description": _TXT})},
         "criteres": _LISTE,
+        # Membres dont le mandat couvre chaque critère (désignés par l'animateur, contrôlés par le serveur)
+        "porteurs_criteres": {"type": "array", "items": _obj({"critere": _TXT, "membres": _LISTE})},
         "contraintes": _LISTE,
         "informations_manquantes": _LISTE,
         "questions_pour_humain": _LISTE,
@@ -90,11 +51,13 @@ SCHEMAS = {
         "hypotheses_fragiles": {"type": "array", "items": _ARG},
         "scenarios_echec": _LISTE,
         "angles_morts": _LISTE,
+        # Le contradicteur conteste aussi la composition du comité
+        "critique_composition": _obj({"angles_absents": _LISTE, "voix_surrepresentees": _LISTE, "commentaire": _TXT}),
     }),
     "objections": _obj({
         "objections": {"type": "array", "items": _obj({
             "id": _TXT,
-            "cible": {"type": "string", "enum": EXPERTS},
+            "cible": _TXT,                      # restreint aux experts de la séance par schemas_seance
             "texte": _TXT,
             "sources": _LISTE,
         })},
@@ -129,6 +92,16 @@ SCHEMAS = {
     }),
 }
 
+
+
+def schemas_seance(experts: list[str]) -> dict:
+    """Schémas propres à une séance : les objections ne peuvent viser que ses experts."""
+    schemas = copy.deepcopy(SCHEMAS)
+    schemas["objections"]["properties"]["objections"]["items"]["properties"]["cible"] = \
+        {"type": "string", "enum": list(experts)}
+    return schemas
+
+
 # --------------------------------------------------------------------------- prompts
 
 def prefixe_commun(dossier_texte: str) -> str:
@@ -138,7 +111,7 @@ def prefixe_commun(dossier_texte: str) -> str:
     (--enable-prefix-caching) de ne calculer le dossier qu'une seule fois.
     """
     return (
-        "Tu participes à une séance d'un COMEX virtuel consultatif. Plusieurs membres analysent "
+        "Tu participes à une séance d'un comité virtuel consultatif. Plusieurs membres analysent "
         "la même question, chacun selon son mandat, pour préparer l'arbitrage d'un décideur humain.\n\n"
         "Règles communes :\n"
         "- Appuie chaque argument sur le dossier en citant les sections sous la forme [D1-§2].\n"
@@ -157,30 +130,51 @@ def _bloc(titre: str, contenu) -> str:
     return f"## {titre}\n{contenu}\n"
 
 
-def _role(agent_id: str) -> str:
-    a = AGENTS[agent_id]
-    return f"## Ton rôle : {a['titre']}\n{a['mandat']}\n"
+def _role(membre) -> str:
+    """membre : objet ou dict portant titre et mandat (mandat effectivement envoyé au modèle)."""
+    titre = membre["titre"] if isinstance(membre, dict) else membre.titre
+    mandat = membre["mandat"] if isinstance(membre, dict) else membre.mandat
+    return f"## Ton rôle : {titre}\n{mandat}\n"
 
 
-def _schema(etape: str) -> str:
-    return _bloc("Format de réponse (schéma JSON)", SCHEMAS[etape])
+def _schema(schema: dict) -> str:
+    return _bloc("Format de réponse (schéma JSON)", schema)
 
 
-def prompt_cadrage(complement_humain: str) -> str:
-    texte = _role("president") + (
+def _membres(experts: list) -> str:
+    return "\n".join(f"- {m.id} : {m.titre}" for m in experts)
+
+
+def _membres_detail(experts: list) -> str:
+    return "\n".join(f"- {m.id} : {m.titre}. Mandat : {m.mandat} Critères usuels : {', '.join(m.criteres) or 'aucun'}."
+                     for m in experts)
+
+
+def prompt_cadrage(president, schema: dict, complement_humain: str, experts: list | None = None,
+                   criteres_usuels: list[str] | None = None) -> str:
+    texte = _role(president)
+    if criteres_usuels:
+        texte += _bloc("Critères usuels de ce type de comité (point de départ)", "\n".join(f"- {c}" for c in criteres_usuels))
+    if experts:
+        texte += _bloc("Membres du comité (identifiant : rôle)", _membres_detail(experts))
+    texte += (
         "## Tâche : cadrage\n"
         "Reformule la question à trancher, la décision attendue, les options (reprends celles du dossier, "
         "avec des identifiants courts A, B, C...), les critères de décision et les contraintes. "
+        "Les critères découlent de la décision et des contraintes, pas des membres présents : reprends mot pour mot "
+        "les critères usuels qui s'appliquent, écarte ceux qui ne s'appliquent pas et ajoute ceux que la décision exige. "
+        "Dans porteurs_criteres, indique pour chaque critère les identifiants des membres dont le mandat le couvre ; "
+        "laisse la liste vide si aucun membre ne le couvre, le décideur en sera averti. "
         "Liste les informations manquantes et les questions à poser au décideur. "
         "Mets suffisant à false seulement si une information est indispensable pour que l'analyse ait un sens.\n"
     )
     if complement_humain:
         texte += _bloc("Précisions apportées par le décideur", complement_humain)
-    return texte + _schema("cadrage")
+    return texte + _schema(schema)
 
 
-def prompt_avis(agent_id: str, cadrage: dict, complement: str) -> str:
-    texte = _role(agent_id) + _bloc("Cadrage validé par le décideur", cadrage)
+def prompt_avis(membre, schema: dict, cadrage: dict, complement: str) -> str:
+    texte = _role(membre) + _bloc("Cadrage validé par le décideur", cadrage)
     if complement:
         texte += _bloc("Précisions du décideur", complement)
     return texte + (
@@ -188,39 +182,46 @@ def prompt_avis(agent_id: str, cadrage: dict, complement: str) -> str:
         "Donne ton analyse indépendante selon ton mandat. Tu ne connais pas l'avis des autres membres. "
         "Indique l'option que tu préfères (identifiant), ta position, tes arguments sourcés, tes hypothèses, "
         "les risques, ce que tu ignores et ce qui te ferait changer d'avis. confiance va de 1 (faible) à 5.\n"
-    ) + _schema("avis")
+    ) + _schema(schema)
 
 
-def prompt_contre_analyse(cadrage: dict) -> str:
-    return _role("contradicteur") + _bloc("Cadrage validé", cadrage) + (
+def prompt_contre_analyse(contradicteur, schema: dict, cadrage: dict, experts: list | None = None) -> str:
+    texte = _role(contradicteur) + _bloc("Cadrage validé", cadrage)
+    if experts:
+        texte += _bloc("Composition du comité", _membres_detail(experts))
+    return texte + (
         "## Tâche : contre-analyse indépendante\n"
         "Sans connaître les avis des membres, identifie les hypothèses les plus fragiles du dossier, "
-        "les scénarios dans lesquels chaque option échouerait, et les angles morts du cadrage.\n"
-    ) + _schema("contre_analyse")
+        "les scénarios dans lesquels chaque option échouerait, et les angles morts du cadrage. "
+        "Conteste aussi la composition du comité : quels angles ou parties prenantes manquent pour cette décision, "
+        "quelles voix sont surreprésentées (critique_composition). Une composition adaptée se dit en une phrase.\n"
+    ) + _schema(schema)
 
 
-def prompt_objections(cadrage: dict, contre_analyse: dict, avis: dict) -> str:
-    return _role("contradicteur") + _bloc("Cadrage", cadrage) + _bloc("Ta contre-analyse", contre_analyse) + \
-        _bloc("Avis des membres", avis) + (
+def prompt_objections(contradicteur, schema: dict, experts: list, cadrage: dict, contre_analyse: dict,
+                      avis: dict) -> str:
+    return _role(contradicteur) + _bloc("Cadrage", cadrage) + _bloc("Ta contre-analyse", contre_analyse) + \
+        _bloc("Membres du comité (identifiant : rôle)", _membres(experts)) + _bloc("Avis des membres", avis) + (
         "## Tâche : objections\n"
-        "Formule de 3 à 6 objections précises, chacune adressée à un membre (champ cible). "
+        "Formule de 3 à 6 objections précises, chacune adressée à un membre (champ cible : son identifiant). "
         "Vise les arguments les plus importants pour la décision, pas les détails. "
         "Numérote les identifiants O1, O2...\n"
-    ) + _schema("objections")
+    ) + _schema(schema)
 
 
-def prompt_reponse(agent_id: str, avis_propre: dict, objections: list) -> str:
-    return _role(agent_id) + _bloc("Ton avis initial", avis_propre) + \
+def prompt_reponse(membre, schema: dict, avis_propre: dict, objections: list) -> str:
+    return _role(membre) + _bloc("Ton avis initial", avis_propre) + \
         _bloc("Objections qui te sont adressées", objections) + (
         "## Tâche : réponse aux objections\n"
         "Pour chaque objection, indique si tu maintiens ta position, l'ajustes ou concèdes, avec une justification "
         "sourcée. Concéder un point fondé est une qualité, pas une faiblesse. Donne ta position révisée et l'identifiant "
         "de l'option que tu préfères désormais (option_revisee), qui peut rester la même.\n"
-    ) + _schema("reponse")
+    ) + _schema(schema)
 
 
-def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections: list, reponses: dict) -> str:
-    return _role("president") + _bloc("Cadrage", cadrage) + _bloc("Avis initiaux", avis) + \
+def prompt_synthese(president, schema: dict, cadrage: dict, avis: dict, contre_analyse: dict, objections: list,
+                    reponses: dict) -> str:
+    return _role(president) + _bloc("Cadrage", cadrage) + _bloc("Avis initiaux", avis) + \
         _bloc("Contre-analyse", contre_analyse) + _bloc("Objections", objections) + \
         _bloc("Réponses aux objections", reponses) + (
         "## Tâche : synthèse pour le décideur\n"
@@ -235,4 +236,4 @@ def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections:
         "Relie les objections aux échanges (O1, O2...) et indique celles qui restent non résolues. "
         "N'invente ni score numérique ni pondération ; conserve les désaccords et les informations manquantes. "
         "Ne présente jamais un nombre d'avis favorables comme une preuve.\n"
-    ) + _schema("synthese")
+    ) + _schema(schema)

@@ -1,0 +1,10 @@
+id: architecte_entreprise
+version: 1
+nom: Architecture
+titre: Architecture d'entreprise
+initiales: AE
+mandat: >-
+  Cohérence du système d'information, standards et interfaces, dette technique, capacité à changer
+  de solution sans tout reconstruire.
+question_cle: Ce choix nous enferme-t-il, ou reste-t-il réversible ?
+criteres: [Réversibilité]

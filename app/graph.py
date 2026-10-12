@@ -12,7 +12,7 @@ est construit explicitement (un expert ne voit pas l'avis des autres au premier 
 import operator
 import re
 import time
-from typing import Annotated, TypedDict
+from typing import Annotated, Callable, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
@@ -20,9 +20,12 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
 from . import agents as A
+from . import contexte as C
+from .comites import Membre
 from .dossier import refs_citees
 from .llm import Modeles
 from .runtime import seance_de
+from .trace import enregistrer_consigne
 
 MODELES: Modeles | None = None      # initialisé par le serveur au démarrage
 
@@ -58,6 +61,8 @@ class Etat(TypedDict, total=False):
     reponses: Annotated[dict, fusion_contributions]
     synthese: dict
     erreurs: Annotated[list, operator.add]
+    revisions_composition: Annotated[list, operator.add]     # révisions de l'équipe, une par validation
+    compactages: Annotated[list, operator.add]               # contrôles de contexte ayant compacté un prompt
 
 
 class Tache(TypedDict, total=False):
@@ -86,12 +91,37 @@ def sans_meta(contribution: dict | None) -> dict:
 
 
 # --------------------------------------------------------------------------- appel d'un agent
-async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: str):
+async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: Callable, compactable: bool = False):
+    """Appelle un membre de la séance. `consigne(membre, schema)` construit la partie propre au rôle.
+
+    Le membre (mandat envoyé, modèle, mode réflexion) et le schéma viennent de la composition
+    de la séance : deux séances simultanées ne partagent ni comité ni affectation.
+    Si `compactable`, `consigne(membre, schema, niveau)` est appelée avec un niveau de compactage
+    croissant jusqu'à ce que le prompt tienne dans le contexte du modèle ; sinon l'appel n'a pas lieu.
+    Retourne (contribution, erreur, compactage).
+    """
     seance = seance_de(config)
-    messages = [
-        {"role": "system", "content": A.prefixe_commun(seance.dossier.texte)},   # préfixe commun (cache vLLM)
-        {"role": "user", "content": consigne},                                    # partie propre au rôle
-    ]
+    membre = seance.composition.membre(agent_id)
+    schema = seance.schemas[etape]
+    systeme = {"role": "system", "content": A.prefixe_commun(seance.dossier.texte)}   # préfixe commun (cache vLLM)
+    compactage = None
+    if compactable:
+        ajuste = C.ajuster(MODELES.config, membre.modele, etape,
+                           lambda n: [systeme, {"role": "user", "content": consigne(membre, schema, n)}],
+                           seance.calibration)
+        compactage = {k: ajuste[k] for k in ("niveau", "entree", "sortie", "contexte_max", "tient")} | {"etape": etape}
+        if not ajuste["tient"]:
+            message = (f"{etape} : le prompt ({ajuste['entree']} tokens estimés) et la réponse ({ajuste['sortie']}) "
+                       f"dépassent le contexte du modèle {membre.modele} ({ajuste['contexte_max']}), même compacté. "
+                       "Réduisez le dossier ou le nombre d'experts, ou utilisez un modèle à plus grand contexte.")
+            await seance.publier("contexte_depasse", agent=agent_id, **compactage, message=message)
+            await seance.publier("agent_statut", agent=agent_id, statut="erreur", etape=etape, message=message)
+            return None, message, compactage
+        if ajuste["niveau"]:
+            await seance.publier("contexte_compacte", agent=agent_id, **compactage)
+        messages = ajuste["messages"]
+    else:
+        messages = [systeme, {"role": "user", "content": consigne(membre, schema)}]
     await seance.publier("agent_statut", agent=agent_id, statut="analyse", etape=etape, libelle=LIBELLES[etape])
 
     tampons = {"reflexion": "", "redaction": ""}
@@ -108,20 +138,29 @@ async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: s
             await seance.publier("agent_flux", agent=agent_id, nature=nature,
                                  extrait=texte_affiche[-240:], caracteres=len(tampons[nature]))
 
+    reference = enregistrer_consigne(seance, membre, etape, messages, compactage)
     try:
-        resultat, meta = await MODELES.generer(agent_id, etape, messages, on_flux)
+        resultat, meta = await MODELES.generer(agent_id, etape, messages, on_flux,
+                                               modele=membre.modele, thinking=membre.thinking, schema=schema,
+                                               scenario=seance.dossier.nom)
     except Exception as e:  # noqa: BLE001
         await seance.publier("agent_statut", agent=agent_id, statut="erreur", etape=etape, message=str(e)[:300])
-        return None, f"{agent_id}/{etape} : {e}"
+        return None, f"{agent_id}/{etape} : {e}", compactage
+
+    # Calibration : écart entre le comptage réel du modèle et notre estimation (jamais en deçà de 1)
+    if not MODELES.simulation and meta.get("tokens_entree"):
+        seance.calibration = max(seance.calibration, meta["tokens_entree"] / max(1, C.mesurer(messages)))
 
     # Vérification des sources : chaque référence citée doit exister dans le dossier
     citees = refs_citees(resultat)
     meta["sources"] = sorted(citees & seance.dossier.refs)
     meta["sources_invalides"] = sorted(citees - seance.dossier.refs)
+    meta["role"] = {"id": membre.role_id, "version": membre.role_version, "mandat_modifie": membre.mandat_modifie}
+    meta["consigne"] = reference
     await seance.publier("contribution", agent=agent_id, etape=etape, contenu=resultat, meta=meta)
     await seance.publier("agent_statut", agent=agent_id, statut="termine", etape=etape,
                          libelle=LIBELLES[etape], duree=meta["duree"])
-    return {**resultat, "_meta": meta}, None
+    return {**resultat, "_meta": meta}, None, compactage
 
 
 def _erreur(message: str | None) -> dict:
@@ -129,46 +168,74 @@ def _erreur(message: str | None) -> dict:
 
 
 # --------------------------------------------------------------------------- nœuds
+def experts_de(config: RunnableConfig) -> list[str]:
+    return seance_de(config).composition.experts
+
+
+def _experts(config: RunnableConfig) -> list[Membre]:
+    composition = seance_de(config).composition
+    return [composition.membre(e) for e in composition.experts]
+
+
+def _compactage(c: dict | None) -> dict:
+    return {"compactages": [c]} if c and c.get("niveau") else {}
+
+
 async def cadrage(state: Etat, config: RunnableConfig):
-    await seance_de(config).publier("phase", phase="cadrage")
-    res, err = await appeler(config, "president", "cadrage", A.prompt_cadrage(state.get("complement", "")))
+    seance = seance_de(config)
+    await seance.publier("phase", phase="cadrage")
+    res, err, _ = await appeler(config, "president", "cadrage",
+                                lambda m, sch: A.prompt_cadrage(m, sch, state.get("complement", ""), _experts(config),
+                                                                seance.composition.criteres_gabarit))
     return {"cadrage": res, **_erreur(err)} if res else _erreur(err)
 
 
 async def validation(state: Etat):
-    # Pause : la séance attend la décision humaine (reprise via Command(resume=...))
+    # Pause : la séance attend la décision humaine (reprise via Command(resume=...)).
+    # L'équipe peut y être révisée : le serveur applique la révision à la séance avant la reprise,
+    # et la trace est conservée dans l'état. L'équipe est définitive dès que les analyses démarrent.
     reponse = interrupt({"cadrage": sans_meta(state.get("cadrage"))})
-    return {"action_validation": reponse.get("action", "valider"), "complement": reponse.get("complement", "")}
+    maj = {"action_validation": reponse.get("action", "valider"), "complement": reponse.get("complement", "")}
+    if reponse.get("revision"):
+        maj["revisions_composition"] = [reponse["revision"]]
+    return maj
 
 
 async def expert(tache: Tache, config: RunnableConfig):
     agent_id = tache["agent_id"]
-    res, err = await appeler(config, agent_id, "avis",
-                             A.prompt_avis(agent_id, tache["cadrage"], tache.get("complement", "")))
+    res, err, _ = await appeler(config, agent_id, "avis",
+                                lambda m, sch: A.prompt_avis(m, sch, tache["cadrage"], tache.get("complement", "")))
     return {"avis": {f"{agent_id}:initial": res}, **_erreur(err)} if res else _erreur(err)
 
 
 async def contre_analyse(tache: Tache, config: RunnableConfig):
-    res, err = await appeler(config, "contradicteur", "contre_analyse", A.prompt_contre_analyse(tache["cadrage"]))
+    res, err, _ = await appeler(config, "contradicteur", "contre_analyse",
+                                lambda m, sch: A.prompt_contre_analyse(m, sch, tache["cadrage"], _experts(config)))
     return {"contre_analyse": res, **_erreur(err)} if res else _erreur(err)
 
 
 async def challenge(state: Etat, config: RunnableConfig):
-    await seance_de(config).publier("phase", phase="contradiction")
+    seance = seance_de(config)
+    await seance.publier("phase", phase="contradiction")
     avis = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("avis", {}).items()}
-    res, err = await appeler(config, "contradicteur", "objections",
-                             A.prompt_objections(sans_meta(state["cadrage"]), sans_meta(state.get("contre_analyse")), avis))
+    contre = sans_meta(state.get("contre_analyse"))
+
+    def consigne(m, sch, niveau=0):
+        avis_c, contre_c, _ = C.compacter(niveau, avis, contre)
+        return A.prompt_objections(m, sch, _experts(config), sans_meta(state["cadrage"]), contre_c, avis_c)
+
+    res, err, compactage = await appeler(config, "contradicteur", "objections", consigne, compactable=True)
     if not res:
-        return {"objections": [], **_erreur(err)}
+        return {"objections": [], **_erreur(err), **_compactage(compactage)}
     # On ne garde que les objections adressées à un expert qui a effectivement rendu un avis
     objections = [o for o in res.get("objections", []) if o.get("cible") in avis]
-    return {"objections": objections}
+    return {"objections": objections, **_compactage(compactage)}
 
 
 async def reponse_expert(tache: Tache, config: RunnableConfig):
     agent_id = tache["agent_id"]
-    res, err = await appeler(config, agent_id, "reponse",
-                             A.prompt_reponse(agent_id, tache["avis_propre"], tache["objections"]))
+    res, err, _ = await appeler(config, agent_id, "reponse",
+                                lambda m, sch: A.prompt_reponse(m, sch, tache["avis_propre"], tache["objections"]))
     return {"reponses": {f"{agent_id}:reponse": res}, **_erreur(err)} if res else _erreur(err)
 
 
@@ -176,10 +243,17 @@ async def synthese(state: Etat, config: RunnableConfig):
     await seance_de(config).publier("phase", phase="synthese")
     avis = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("avis", {}).items()}
     reponses = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("reponses", {}).items()}
-    res, err = await appeler(config, "president", "synthese",
-                             A.prompt_synthese(sans_meta(state["cadrage"]), avis, sans_meta(state.get("contre_analyse")),
-                                               state.get("objections", []), reponses))
-    return {"synthese": res, **_erreur(err)} if res else _erreur(err)
+    contre = sans_meta(state.get("contre_analyse"))
+
+    # Contrôle réel avant la synthèse : cadrage, avis, contre-analyse, objections, réponses et budget de sortie
+    def consigne(m, sch, niveau=0):
+        avis_c, contre_c, reponses_c = C.compacter(niveau, avis, contre, reponses)
+        return A.prompt_synthese(m, sch, sans_meta(state["cadrage"]), avis_c, contre_c,
+                                 state.get("objections", []), reponses_c)
+
+    res, err, compactage = await appeler(config, "president", "synthese", consigne, compactable=True)
+    return ({"synthese": res, **_erreur(err), **_compactage(compactage)} if res
+            else {**_erreur(err), **_compactage(compactage)})
 
 
 # --------------------------------------------------------------------------- routage
@@ -187,11 +261,12 @@ def apres_cadrage(state: Etat):
     return "validation" if state.get("cadrage") else END
 
 
-def apres_validation(state: Etat):
+def apres_validation(state: Etat, config: RunnableConfig):
     if state.get("action_validation") == "recadrer":
         return "cadrage"
     base = {"cadrage": sans_meta(state["cadrage"]), "complement": state.get("complement", "")}
-    return [Send("expert", {**base, "agent_id": e}) for e in A.EXPERTS] + [Send("contre_analyse", base)]
+    # Les analyses portent sur les experts de CETTE séance
+    return [Send("expert", {**base, "agent_id": e}) for e in experts_de(config)] + [Send("contre_analyse", base)]
 
 
 def apres_challenge(state: Etat):

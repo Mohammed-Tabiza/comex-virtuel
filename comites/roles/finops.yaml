@@ -1,0 +1,10 @@
+id: finops
+version: 1
+nom: FinOps
+titre: FinOps
+initiales: FO
+mandat: >-
+  Coût complet (investissement, exploitation, personnel), taux d'utilisation des ressources,
+  refacturation aux équipes, prévisibilité de la dépense.
+question_cle: Combien cela coûte-t-il vraiment, et qui paie ?
+criteres: [Coût total, Budget]

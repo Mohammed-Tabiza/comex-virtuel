@@ -1,0 +1,10 @@
+id: rssi
+version: 1
+nom: RSSI
+titre: Sécurité des systèmes d'information
+initiales: RS
+mandat: >-
+  Classification et cloisonnement des données, authentification, journalisation, surface d'attaque,
+  conformité aux politiques de sécurité du groupe.
+question_cle: Qui peut voir quelles données, et comment le saurions-nous ?
+criteres: [Sécurité et isolation des données]

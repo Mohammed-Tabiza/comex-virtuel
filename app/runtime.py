@@ -7,6 +7,7 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 
+from .comites import Composition
 from .dossier import Dossier
 
 
@@ -14,11 +15,24 @@ from .dossier import Dossier
 class Seance:
     id: str
     dossier: Dossier
+    # Composition propre à la séance : membres, mandats envoyés, modèles. Aucune autre séance ne la voit.
+    composition: Composition | None = None
+    schemas: dict = field(default_factory=dict)
+    revisions: list[dict] = field(default_factory=list)     # révisions de l'équipe à la validation
+    estimation: dict = field(default_factory=dict)           # estimation du contexte au lancement
+    calibration: float = 1.0                                 # écart constaté entre comptage réel et estimation
+    consignes: list[dict] = field(default_factory=list)      # consigne complète de chaque appel (traçabilité)
     statut: str = "creee"            # creee | en_cours | attente_validation | terminee | erreur
     debut: float = field(default_factory=time.time)
     decision_humaine: str = ""
     evenements: list[dict] = field(default_factory=list)
     _cond: asyncio.Condition = field(default_factory=asyncio.Condition)
+
+    def fixer_composition(self, composition: Composition) -> None:
+        """Associe la composition à la séance et construit les schémas qui en dépendent."""
+        from .agents import schemas_seance
+        self.composition = composition
+        self.schemas = schemas_seance(composition.experts)
 
     async def publier(self, type_: str, **donnees) -> None:
         async with self._cond:

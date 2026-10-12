@@ -96,6 +96,22 @@ Les silences sont raccourcis ; la validation du cadrage reste affichée quelques
 
 Un rejeu contient le contenu des analyses : versionnez uniquement ceux des dossiers non confidentiels.
 
+### Traçabilité et format des rejeux
+
+Depuis la version 2 du format, un rejeu enregistre aussi :
+- la **composition** complète (gabarit et version, rôle et version de chaque membre, modèle, mandat
+  effectivement envoyé et mandat de la bibliothèque) et les **révisions** de l'équipe ;
+- la **consigne complète** de chaque appel, avec le rôle, sa version et le modèle ; chaque contribution
+  y renvoie par `meta.consigne.index` (`GET /api/dossiers/<nom>/rejeux/<id>/consignes/<index>`) ;
+- l'**empreinte** du dossier et du préfixe commun : le dossier n'est pas recopié, mais on sait s'il a changé.
+
+Les rejeux de version 1 restent lisibles tels quels : l'API les ramène au format courant sans modifier le fichier.
+
+Le compte rendu comporte une section **Composition du comité** : membres, versions des rôles, modèles et
+hébergement, mandats modifiés (différence mot à mot avec la bibliothèque), rôles obligatoires retirés avec
+leur justification, révisions de l'équipe, couverture des critères, critique de la composition par le
+contradicteur et compactages éventuels du contexte.
+
 ## Confidentialité des dossiers
 
 Chaque modèle déclare son hébergement dans `config.yaml` : `hebergement: interne` (vLLM sur site, par exemple)
@@ -106,6 +122,107 @@ Chaque dossier est **confidentiel par défaut**. Seul un fichier `_dossier.yaml`
 En mode réel, une séance sur un dossier confidentiel est refusée dès qu'un seul agent pointe vers un
 modèle externe : le bouton est désactivé dans l'interface et l'API répond 403. L'en-tête affiche en
 permanence le statut du dossier et l'hébergement des modèles. Le mode simulation n'envoie aucune donnée.
+
+## Comités et dossiers d'exemple
+
+| Gabarit | Pour quelles décisions | Experts présélectionnés |
+|---|---|---|
+| COMEX | Décisions stratégiques engageant plusieurs directions | Stratégie, Finance, Clients, Opérations, Risques, RH |
+| Comité d'architecture | Choix techniques structurants | Architecture, Exploitation, RSSI, FinOps, Équipes produit, Data et IA |
+| Comité de pilotage | Arbitrages en cours de projet | Sponsor, PMO, Finance, Risques, Opérations |
+| Comité go/no-go | Mise en production, lancement, passage d'étape | Sponsor, PMO, Risques, Exploitation, RSSI |
+
+La bibliothèque compte 15 rôles ; tout rôle peut siéger dans n'importe quel comité. Les rôles marqués
+« obligatoire » dans l'écran de constitution ne se retirent qu'avec une justification écrite.
+
+Deux dossiers fictifs, non confidentiels, permettent de comparer deux comités sur le même protocole :
+- `assistant-ia-2027` (COMEX) : trajectoire 2027 d'un assistant d'IA générative interne ;
+- `plateforme-inference-llm` (comité d'architecture) : plateforme vLLM centrale, hébergement par équipe, ou
+  plateforme centrale avec déploiements dédiés. Le dossier contient des fragilités volontaires (taux
+  d'utilisation non mesuré, coûts d'exploitation omis, latence non testée, date limite fournisseur).
+
+En simulation, chaque dossier a son scénario préenregistré pour le comité présélectionné. Un rôle ajouté au
+comité, ou un dossier sans scénario, reçoit une réponse générique signalée comme telle.
+
+## Bibliothèque des comités et affectation des modèles
+
+Les membres ne sont plus codés en dur : ils sont décrits dans `comites/`.
+
+```
+comites/fonctions/   président (ou animateur) et contradicteur, présents dans tous les comités
+comites/roles/       une expertise par fichier : mandat, question clé, critères portés, version
+comites/gabarits/    un type de comité : rôles obligatoires et optionnels, présélection, taille, critères
+```
+
+Chaque fichier porte une `version` : incrémentez-la quand vous modifiez un mandat, pour savoir
+quelle consigne a produit quel avis. Le chargement vérifie la cohérence de la bibliothèque
+(identifiants, rôles inconnus, présélection entre `experts.min` et `experts.max`, au plus 6 experts).
+
+L'affectation des modèles se fait par règles dans `config.yaml`, section `affectation` :
+modèle du président, du contradicteur, liste des modèles répartis à tour de rôle entre les experts,
+exceptions par rôle (`par_role`) et membres en mode réflexion (`thinking`). Le champ `lignee`
+de chaque modèle indique sa famille d'entraînement : avec `famille_differente_contradicteur: preference`,
+le contradicteur reçoit un modèle d'une autre lignée que le président lorsqu'il en existe un.
+L'ancien format `agents:` reste accepté.
+
+Chaque séance porte sa propre composition, figée à son ouverture : membres, mandats effectivement
+envoyés, modèles. Deux séances simultanées ne partagent ni comité ni affectation, et le garde-fou
+de confidentialité s'applique aux modèles réellement retenus. Le comité présélectionné pour un dossier
+se déclare dans son `_dossier.yaml` (`gabarit: comex`) ; à défaut, `gabarit_defaut` de `config.yaml`.
+Dans l'interface, **Constituer le comité** ouvre l'écran de constitution : gabarit présélectionné par le
+dossier, membres à cocher (les rôles du gabarit, puis les autres rôles de la bibliothèque), mandat et modèle
+de chaque membre, justification écrite si un rôle obligatoire est retiré. Le panneau de droite évalue la
+composition en continu : nombre d'experts, confidentialité, estimation du contexte et critères usuels couverts.
+**Lancer la séance** n'est actif que pour une composition valide. À la validation du cadrage, le volet
+**Équipe** permet de réviser le comité de la même façon, avec la couverture des critères du cadrage ; le motif
+de la révision est consigné. Autour de la table, les sièges se répartissent selon le nombre de membres.
+
+La composition peut aussi se choisir par l'API :
+
+```bash
+curl -X POST localhost:8000/api/seances -H 'content-type: application/json' -d '{
+  "dossier": "assistant-ia-2027",
+  "selection": ["finance", "risques", "operations"],
+  "mandats": {"finance": "Concentre-toi sur la trésorerie 2027."},
+  "affectations": {"risques": "gpt_oss"}
+}'
+```
+
+`GET /api/comites` renvoie la bibliothèque (rôles, fonctions, gabarits).
+`POST /api/dossiers/<nom>/composition` évalue une composition sans lancer de séance : erreurs,
+blocage de confidentialité, estimation du contexte et couverture des critères usuels.
+
+### Validation : critères, couverture et révision de l'équipe
+
+Les critères découlent de la décision : l'animateur part des critères usuels du gabarit, écarte ceux qui
+ne s'appliquent pas et ajoute ceux que la décision exige. Il désigne pour chaque critère les membres qui le
+portent. À la validation, le décideur voit la **couverture** : les critères sans porteur sont signalés
+(alerte, pas blocage).
+
+L'équipe peut être révisée à la validation, avant les analyses ; la révision est tracée (ajouts, retraits,
+modèles et mandats changés, motif) dans l'état de la séance et dans le journal. Ajouter ou retirer un expert
+ne demande pas de nouveau cadrage ; modifier options, contraintes ou critères passe par « Demander un
+nouveau cadrage ». Une fois les analyses lancées, l'équipe est définitive.
+
+```bash
+curl -X POST localhost:8000/api/seances/<id>/validation -H 'content-type: application/json' -d '{
+  "action": "valider",
+  "composition_revisee": {"selection": ["finance", "risques", "operations", "rh"],
+                          "affectations": {"rh": "gpt_oss"}, "motif": "Décision budgétaire."}
+}'
+```
+
+Le contradicteur reçoit la composition et la conteste aussi (`critique_composition` : angles absents,
+voix surreprésentées).
+
+### Contexte : estimation au lancement, contrôle réel avant les étapes lourdes
+
+Au lancement, la longueur des contributions est inconnue : l'application estime prudemment
+(`protocole.estimation_tokens`) les appels les plus exigeants et renvoie un niveau `ok`, `attention` ou
+`depassement`. Avant les objections et la synthèse, le prompt réellement construit est mesuré, budget de
+sortie compris, puis corrigé par l'écart observé entre l'estimation et le comptage réel des appels précédents.
+S'il ne tient pas, les contributions sont compactées en deux niveaux ; s'il ne tient toujours pas, l'appel
+n'a pas lieu et la séance s'arrête avec un message explicite.
 
 ## Créer un nouveau dossier
 

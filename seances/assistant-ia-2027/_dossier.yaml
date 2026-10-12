@@ -3,3 +3,5 @@
 # il ne peut alors être analysé que par des modèles déclarés « hebergement: interne » dans config.yaml.
 confidentiel: false
 description: "Cas fictif (Groupe Altaris) pour démonstration"
+# Comité présélectionné à l'ouverture de la séance (modifiable avant le lancement)
+gabarit: comex

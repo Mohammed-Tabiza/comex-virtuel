@@ -15,7 +15,8 @@ mode: simulation
 modeles:
   gemma:
     libelle: "Gemma 4 31B Cloud"
-    famille: ollama
+    famille: ollama                   # pilote les paramètres d'API (thinking...)
+    lignee: gemma                     # famille d'entraînement, pour diversifier les avis
     hebergement: externe              # modèle -cloud : exécuté sur les serveurs d'Ollama
     base_url: "http://localhost:11434/v1"
     api_key: ""                      # aucune clé API
@@ -28,6 +29,7 @@ modeles:
   gpt_oss:
     libelle: "GPT OSS 120B Cloud"
     famille: ollama
+    lignee: gpt-oss
     hebergement: externe
     base_url: "http://localhost:11434/v1"
     api_key: ""                      # aucune clé API
@@ -37,22 +39,35 @@ modeles:
     temperature: 0.5
     max_tokens: 4096
 
-# Répartition des agents sur les modèles (modifiable sans toucher au code)
-agents:
-  president:    { modele: gemma, thinking: true }
-  contradicteur: { modele: gpt_oss, thinking: true }
-  finance:      { modele: gemma, thinking: false }
-  strategie:    { modele: gemma, thinking: false }
-  risques:      { modele: gpt_oss, thinking: false }
-  operations:   { modele: gpt_oss, thinking: false }
-  clients:      { modele: gemma, thinking: false }
-  rh:           { modele: gemma, thinking: false }
+# Bibliothèque des comités (rôles, fonctions du protocole, gabarits) et comité proposé par défaut
+bibliotheque: comites
+gabarit_defaut: comex
+
+# Affectation des modèles aux membres d'un comité (le comité varie d'une séance à l'autre)
+affectation:
+  president: gemma                  # président ou animateur
+  contradicteur: gpt_oss
+  experts: [gemma, gpt_oss]         # répartis à tour de rôle entre les experts du comité
+  par_role:                         # exceptions, rôle par rôle (facultatif)
+    finance: gemma
+    clients: gemma
+    rh: gemma
+    operations: gpt_oss
+    risques: gpt_oss
+  thinking: [president, contradicteur]   # membres pour lesquels le mode réflexion est activé
+  # preference : si le contradicteur partage la lignée du président, un modèle d'une autre lignée
+  #              est choisi lorsqu'il en existe un ; sinon le choix est conservé et signalé.
+  # ignorer    : le modèle indiqué est toujours utilisé.
+  famille_differente_contradicteur: preference
 
 protocole:
   # La comparaison détaillée des options nécessite une réponse plus longue.
   synthese_max_tokens: 6144
   # Taille maximale du dossier (en tokens estimés) avant avertissement
   budget_dossier_tokens: 15000
+  # Longueurs prudentes des contributions (tokens) pour estimer le contexte au lancement.
+  # Le contrôle réel a lieu avant les objections et la synthèse, avec compactage si nécessaire.
+  estimation_tokens: {cadrage: 900, avis: 1200, contre_analyse: 1300, objections: 900, reponse: 600}
   # json_schema : sortie contrainte par vLLM (recommandé)
   # consigne    : schéma donné dans le prompt uniquement (si json_schema pose problème)
   sortie_structuree: json_schema

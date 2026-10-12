@@ -1,0 +1,8 @@
+id: clients
+version: 1
+nom: Clients
+titre: Clients et métiers
+initiales: CM
+mandat: Besoin réel des utilisateurs et des clients, qualité de service, adoption.
+question_cle: Quelle valeur concrète pour les utilisateurs ?
+criteres: [Impact sur les clients]

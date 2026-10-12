@@ -26,8 +26,8 @@ def charger_config(chemin: Path | None = None) -> dict:
         config = _substituer(yaml.safe_load(f))
     config["mode"] = os.environ.get("COMEX_MODE", config.get("mode", "simulation"))
 
-    # Contrôles de cohérence : chaque agent doit pointer vers un modèle déclaré
-    for agent_id, reglage in config["agents"].items():
+    # Contrôles de cohérence : chaque agent doit pointer vers un modèle déclaré (ancien format)
+    for agent_id, reglage in (config.get("agents") or {}).items():
         if reglage["modele"] not in config["modeles"]:
             raise ValueError(f"L'agent {agent_id} utilise un modèle inconnu : {reglage['modele']}")
     # Hébergement : sans déclaration explicite, un modèle est considéré comme externe (hypothèse prudente)
@@ -35,17 +35,20 @@ def charger_config(chemin: Path | None = None) -> dict:
         modele["hebergement"] = modele.get("hebergement", "externe")
         if modele["hebergement"] not in HEBERGEMENTS:
             raise ValueError(f"Modèle {nom} : hebergement doit valoir 'interne' ou 'externe'")
+    # Bibliothèque de comités et règles d'affectation des modèles
+    from .comites import Bibliotheque, normaliser_affectation
+    config["bibliotheque"] = str(RACINE / config.get("bibliotheque", "comites"))
+    bib = Bibliotheque.charger(Path(config["bibliotheque"]))
+    config["affectation"] = normaliser_affectation(config)
+    # L'ancien format « agents: » n'a servi qu'à déduire les règles : aucune table agent → modèle
+    # globale ne subsiste, chaque séance porte sa propre composition.
+    config.pop("agents", None)
+    config["gabarit_defaut"] = config.get("gabarit_defaut") or ("comex" if "comex" in bib.gabarits else next(iter(bib.gabarits)))
+    if config["gabarit_defaut"] not in bib.gabarits:
+        raise ValueError(f"gabarit_defaut inconnu : {config['gabarit_defaut']}")
     if config["mode"] == "reel":
-        for nom in {r["modele"] for r in config["agents"].values()}:
+        regle = config["affectation"]
+        for nom in {regle["president"], regle["contradicteur"], *regle["experts"], *regle["par_role"].values()}:
             if not config["modeles"][nom].get("base_url"):
                 raise ValueError(f"Mode réel : base_url manquante pour le modèle {nom}")
     return config
-
-
-def agents_sur_modeles_externes(config: dict) -> list[dict]:
-    """Agents dont le modèle est hébergé hors de l'entreprise (les données du dossier lui seraient envoyées)."""
-    return [
-        {"agent": agent_id, "modele": reglage["modele"], "libelle": config["modeles"][reglage["modele"]]["libelle"]}
-        for agent_id, reglage in config["agents"].items()
-        if config["modeles"][reglage["modele"]]["hebergement"] != "interne"
-    ]

@@ -1,0 +1,17 @@
+# Comité go/no-go : décision de lancement ou de passage d'étape.
+id: go_no_go
+version: 1
+nom: Comité go/no-go
+description: Décision de mise en production, de lancement ou de passage à l'étape suivante.
+fonctions:
+  president: {titre: Président du comité go/no-go, nom: Président}
+obligatoires: [sponsor_metier, risques, exploitation]
+optionnels: [pmo, finance, rssi, clients, equipes_produit]
+selection_defaut: [sponsor_metier, pmo, risques, exploitation, rssi]
+experts: {min: 3, max: 6}
+criteres:
+  - Critères de passage atteints
+  - Risques et conformité
+  - Préparation de l'exploitation
+  - Sécurité et isolation des données
+  - Capacité de retour arrière

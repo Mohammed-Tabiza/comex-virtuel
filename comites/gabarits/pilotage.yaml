@@ -1,0 +1,17 @@
+# Comité de pilotage : arbitrages en cours de projet (périmètre, délai, budget, ressources).
+id: pilotage
+version: 1
+nom: Comité de pilotage
+description: Arbitrages en cours de projet sur le périmètre, le planning, le budget et les ressources.
+fonctions:
+  president: {titre: Président du comité de pilotage, nom: Président}
+obligatoires: [sponsor_metier, pmo]
+optionnels: [finance, risques, operations, rh, equipes_produit, architecte_entreprise]
+selection_defaut: [sponsor_metier, pmo, finance, risques, operations]
+experts: {min: 3, max: 6}
+criteres:
+  - Respect des objectifs
+  - Délais
+  - Budget
+  - Risques et conformité
+  - Charge des équipes

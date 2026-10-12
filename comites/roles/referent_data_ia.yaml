@@ -1,0 +1,10 @@
+id: referent_data_ia
+version: 1
+nom: Data et IA
+titre: Référent data et IA
+initiales: DI
+mandat: >-
+  Adéquation des modèles aux usages, évaluation de leur qualité, rythme de renouvellement des modèles
+  ouverts, portabilité des applications d'un modèle à l'autre.
+question_cle: Pourrons-nous changer de modèle au rythme où ils évoluent ?
+criteres: [Performance, Réversibilité]

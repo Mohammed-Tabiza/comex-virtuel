@@ -1,0 +1,18 @@
+# Comité d'architecture : choix techniques structurants pour le système d'information.
+id: architecture
+version: 1
+nom: Comité d'architecture
+description: Choix techniques structurants, engageant plusieurs équipes ou plusieurs années.
+fonctions:
+  president: {titre: Animateur du comité d'architecture, nom: Animateur}
+obligatoires: [architecte_entreprise, exploitation, rssi]
+optionnels: [finops, equipes_produit, referent_data_ia, achats]
+selection_defaut: [architecte_entreprise, exploitation, rssi, finops, equipes_produit, referent_data_ia]
+experts: {min: 3, max: 6}
+criteres:
+  - Coût total
+  - Sécurité et isolation des données
+  - Performance
+  - Autonomie des équipes
+  - Exploitabilité
+  - Réversibilité

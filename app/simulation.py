@@ -21,6 +21,13 @@ CADRAGE = {
     ],
     "criteres": ["Valeur démontrée", "Conformité contractuelle et réglementaire", "Capacité d'exécution en 2027",
                  "Coût complet sur 4 ans", "Acceptabilité sociale"],
+    "porteurs_criteres": [
+        {"critere": "Valeur démontrée", "membres": ["finance", "clients"]},
+        {"critere": "Conformité contractuelle et réglementaire", "membres": ["risques"]},
+        {"critere": "Capacité d'exécution en 2027", "membres": ["operations", "rh"]},
+        {"critere": "Coût complet sur 4 ans", "membres": ["finance"]},
+        {"critere": "Acceptabilité sociale", "membres": ["rh"]},
+    ],
     "contraintes": ["Aucune donnée client traitée hors UE [D0-§5]", "Investissement 2027 plafonné à 2 M€ [D0-§5]",
                     "Pas de généralisation avant la fin de la consultation du CSE [D0-§5]"],
     "informations_manquantes": ["Adoption hors volontaires [D0-§6]", "Capacité au-delà de 250 utilisateurs simultanés [D0-§6]",
@@ -137,6 +144,13 @@ CONTRE_ANALYSE = {
         "Aucune option hybride : interne pour les données clients, SaaS pour les usages sans données sensibles.",
         "Le coût de ne rien généraliser en 2027 n'est pas chiffré.",
     ],
+    "critique_composition": {
+        "angles_absents": ["Personne ne parle pour les collaborateurs non volontaires, qui seraient la majorité des "
+                           "utilisateurs en cas de généralisation [D1-§1] [D4-§1]."],
+        "voix_surrepresentees": [],
+        "commentaire": "Composition adaptée à une décision budgétaire ; l'angle des utilisateurs non volontaires "
+                       "reste à porter explicitement.",
+    },
 }
 
 OBJECTIONS = {"objections": [
@@ -245,9 +259,9 @@ for _option, _details in zip(SYNTHESE["options"], _COMPARAISON):
     _option.update(_details)
 
 REFLEXIONS = {
-    "cadrage": "Je relis la question posée et la décision attendue. Trois options sont décrites dans le dossier. Les contraintes non négociables portent sur la localisation des données, l'enveloppe et le CSE. Plusieurs inconnues sont listées par le dossier lui-même…",
+    "cadrage": "Je relis la question posée et la décision attendue. Je reprends les options décrites dans le dossier, les contraintes non négociables et les inconnues qu'il liste lui-même, puis je pars des critères usuels du comité…",
     "avis": "Je reprends le cadrage validé et les sections qui concernent mon mandat. Je vérifie les chiffres cités, je sépare ce que le dossier établit de ce qu'il suppose, puis je construis ma position…",
-    "contre_analyse": "Je cherche les hypothèses sur lesquelles reposent toutes les options. Le pilote porte sur des volontaires, les gains sont déclaratifs, la capacité n'a pas été testée…",
+    "contre_analyse": "Je cherche les hypothèses sur lesquelles reposent toutes les options, les chiffres qui ne viennent d'aucune mesure, et les points de vue qui manquent autour de la table…",
     "objections": "Je compare chaque avis à ma contre-analyse. Je retiens les arguments qui pèsent le plus sur la décision et qui reposent sur une hypothèse non démontrée…",
     "reponse": "Je relis l'objection qui m'est adressée. Est-elle fondée au regard du dossier ? Je décide de maintenir, d'ajuster ou de concéder…",
     "synthese": "Je rassemble les avis, la contre-analyse et les réponses. Je repère les points d'accord, les désaccords qui persistent après contradiction, et les conditions qui reviennent chez plusieurs membres…",
@@ -258,22 +272,49 @@ def reflexion(agent_id: str, etape: str) -> str:
     return REFLEXIONS.get(etape, "Analyse en cours…")
 
 
-def reponse(agent_id: str, etape: str) -> dict:
-    table = {
-        "cadrage": CADRAGE,
-        "avis": AVIS.get(agent_id),
-        "contre_analyse": CONTRE_ANALYSE,
-        "objections": OBJECTIONS,
-        "reponse": REPONSES.get(agent_id),
-        "synthese": SYNTHESE,
+# --------------------------------------------------------------------------- scénarios
+# Un scénario par dossier d'exemple. Les avis et réponses sont préenregistrés pour les experts du comité
+# présélectionné ; un rôle ajouté ou un dossier sans scénario reçoit une réponse générique, signalée comme telle.
+def _scenarios() -> dict:
+    from . import simulation_inference as inference
+    altaris = {"cadrage": CADRAGE, "avis": AVIS, "contre_analyse": CONTRE_ANALYSE, "objections": OBJECTIONS,
+               "reponse": REPONSES, "synthese": SYNTHESE}
+    return {
+        "assistant-ia-2027": altaris,
+        "plateforme-inference-llm": {"cadrage": inference.CADRAGE, "avis": inference.AVIS,
+                                     "contre_analyse": inference.CONTRE_ANALYSE, "objections": inference.OBJECTIONS,
+                                     "reponse": inference.REPONSES, "synthese": inference.SYNTHESE},
     }
-    return copy.deepcopy(table[etape] or _generique(etape))
+
+
+SCENARIO_DEFAUT = "assistant-ia-2027"
+GENERIQUE = "[Simulation générique : aucune réponse préenregistrée pour ce rôle et ce dossier.]"
+
+
+def reponse(agent_id: str, etape: str, scenario: str | None = None) -> dict:
+    """Réponse préenregistrée. Sans scénario : le dossier Altaris (compatibilité)."""
+    scenarios = _scenarios()
+    table = scenarios.get(scenario or SCENARIO_DEFAUT)
+    if table is None:
+        return copy.deepcopy(_generique(etape))
+    contenu = table[etape].get(agent_id) if etape in ("avis", "reponse") else table[etape]
+    return copy.deepcopy(contenu if contenu else _generique(etape))
 
 
 def _generique(etape: str) -> dict:
     if etape == "avis":
-        return {"position": "reserve", "option_preferee": "A", "resume": "[Simulation] Avis générique.",
-                "arguments": [], "hypotheses": [], "risques": [], "inconnues": [], "conditions_changement": [], "confiance": 2}
+        return {"position": "reserve", "option_preferee": "", "resume": GENERIQUE,
+                "arguments": [], "hypotheses": [], "risques": [], "inconnues": [], "conditions_changement": [], "confiance": 1}
     if etape == "reponse":
-        return {"reponses": [], "position_revisee": "reserve", "option_revisee": "A", "resume": "[Simulation] Réponse générique."}
-    return {}
+        return {"reponses": [], "position_revisee": "reserve", "option_revisee": "", "resume": GENERIQUE}
+    if etape == "cadrage":
+        return {"question_reformulee": GENERIQUE, "decision_attendue": "", "options": [], "criteres": [],
+                "porteurs_criteres": [], "contraintes": [], "informations_manquantes": [], "questions_pour_humain": [],
+                "suffisant": True}
+    if etape == "contre_analyse":
+        return {"resume": GENERIQUE, "hypotheses_fragiles": [], "scenarios_echec": [], "angles_morts": [],
+                "critique_composition": {"angles_absents": [], "voix_surrepresentees": [], "commentaire": ""}}
+    if etape == "objections":
+        return {"objections": []}
+    return {"recommandation": GENERIQUE, "conditions": [], "options": [], "accords": [], "desaccords": [],
+            "hypotheses_fragiles": [], "informations_a_obtenir": []}

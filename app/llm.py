@@ -49,29 +49,36 @@ class Modeles:
                 self.clients[nom] = AsyncOpenAI(base_url=m["base_url"], api_key=m.get("api_key") or "EMPTY",
                                                 timeout=600, max_retries=1)
 
-    def modele_de(self, agent_id: str) -> tuple[str, dict, bool]:
-        reglage = self.config["agents"][agent_id]
-        return reglage["modele"], self.config["modeles"][reglage["modele"]], reglage.get("thinking", False)
+    async def generer(self, agent_id: str, etape: str, messages: list[dict], on_flux: OnFlux, *,
+                      modele: str, thinking: bool, schema: dict, scenario: str | None = None) -> tuple[dict, dict]:
+        """Appelle le modèle affecté au membre par la composition de la séance.
 
-    async def generer(self, agent_id: str, etape: str, messages: list[dict], on_flux: OnFlux) -> tuple[dict, dict]:
-        nom, modele, thinking = self.modele_de(agent_id)
+        Rien n'est lu dans une table globale : modèle, mode réflexion et schéma viennent de la séance.
+        """
+        nom = modele
+        if nom not in self.config["modeles"]:
+            raise ErreurModele(f"Modèle inconnu : {nom}")
+        reglages = self.config["modeles"][nom]
         debut = time.time()
         async with self.verrous[nom]:
             if self.simulation:
-                resultat, usage = await self._simuler(agent_id, etape, on_flux)
+                resultat, usage = await self._simuler(agent_id, etape, on_flux, schema, scenario)
             else:
-                resultat, usage = await self._appeler(nom, modele, thinking, etape, messages, on_flux)
+                if nom not in self.clients:
+                    raise ErreurModele(f"Modèle {nom} : aucune base_url configurée")
+                resultat, usage = await self._appeler(nom, reglages, thinking, etape, messages, on_flux, schema)
+        modele = reglages
         meta = {"modele": nom, "libelle": modele["libelle"], "duree": round(time.time() - debut, 1), **usage}
         return resultat, meta
 
     # ------------------------------------------------------------------ appel réel
     async def _appeler(self, nom: str, modele: dict, thinking: bool, etape: str, messages: list[dict],
-                       on_flux: OnFlux):
+                       on_flux: OnFlux, schema: dict | None = None):
         client = self.clients[nom]
         mode = self.sortie
         for tentative in range(2):
             try:
-                texte, usage = await self._flux(client, modele, thinking, etape, messages, mode, on_flux)
+                texte, usage = await self._flux(client, modele, thinking, etape, messages, mode, on_flux, schema)
                 return extraire_json(texte), usage
             except json.JSONDecodeError:
                 if tentative == 1:
@@ -85,7 +92,7 @@ class Modeles:
                     raise ErreurModele(f"{type(e).__name__} : {e}") from e
                 mode = "consigne"
 
-    async def _flux(self, client, modele, thinking, etape, messages, mode, on_flux):
+    async def _flux(self, client, modele, thinking, etape, messages, mode, on_flux, schema: dict | None = None):
         max_tokens = modele.get("max_tokens", 4096)
         if etape == "synthese":
             max_tokens = self.config["protocole"].get("synthese_max_tokens", max_tokens)
@@ -94,7 +101,7 @@ class Modeles:
                       stream_options={"include_usage": True})
         if mode == "json_schema":
             params["response_format"] = {"type": "json_schema",
-                                         "json_schema": {"name": etape, "schema": SCHEMAS[etape], "strict": True}}
+                                         "json_schema": {"name": etape, "schema": schema or SCHEMAS[etape], "strict": True}}
         if modele.get("famille") == "qwen":
             params["extra_body"] = {"chat_template_kwargs": {"enable_thinking": thinking}}
 
@@ -119,8 +126,14 @@ class Modeles:
         return contenu, usage
 
     # ------------------------------------------------------------------ simulation
-    async def _simuler(self, agent_id: str, etape: str, on_flux: OnFlux):
-        resultat = simulation.reponse(agent_id, etape)
+    async def _simuler(self, agent_id: str, etape: str, on_flux: OnFlux, schema: dict | None = None,
+                       scenario: str | None = None):
+        resultat = simulation.reponse(agent_id, etape, scenario)
+        # Comme le ferait la sortie contrainte d'un vrai modèle : les objections ne visent que les experts de la séance
+        if etape == "objections" and schema:
+            cibles = schema["properties"]["objections"]["items"]["properties"]["cible"].get("enum")
+            if cibles:
+                resultat["objections"] = [o for o in resultat.get("objections", []) if o.get("cible") in cibles]
         mini, maxi = self.config["protocole"].get("simulation_duree", [3, 8])
         duree = random.uniform(mini, maxi)
         reflexion = simulation.reflexion(agent_id, etape)

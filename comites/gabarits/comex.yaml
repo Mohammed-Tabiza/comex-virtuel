@@ -1,0 +1,19 @@
+# Comité exécutif : décisions stratégiques engageant plusieurs directions.
+id: comex
+version: 1
+nom: COMEX
+description: Décisions stratégiques qui engagent plusieurs directions et un budget significatif.
+fonctions:
+  president: {titre: Président et rapporteur, nom: Président}
+obligatoires: [finance, risques]
+optionnels: [strategie, clients, operations, rh]
+selection_defaut: [strategie, finance, clients, operations, risques, rh]
+experts: {min: 3, max: 6}
+criteres:
+  - Alignement stratégique
+  - Valeur créée
+  - Coût et soutenabilité financière
+  - Impact sur les clients
+  - Capacité d'exécution
+  - Risques et conformité
+  - Impact humain et organisationnel

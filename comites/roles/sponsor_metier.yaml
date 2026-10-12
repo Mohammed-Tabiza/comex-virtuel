@@ -1,0 +1,10 @@
+id: sponsor_metier
+version: 1
+nom: Sponsor
+titre: Sponsor métier
+initiales: SM
+mandat: >-
+  Bénéfices attendus par le métier, alignement avec les objectifs initiaux du projet, arbitrage entre
+  périmètre, délai et qualité du point de vue de ceux qui en porteront les résultats.
+question_cle: Le projet livre-t-il ce pour quoi il a été lancé ?
+criteres: [Respect des objectifs, Critères de passage atteints]

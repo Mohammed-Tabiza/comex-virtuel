@@ -1,0 +1,8 @@
+id: finance
+version: 1
+nom: Finance
+titre: Direction financière
+initiales: FI
+mandat: Coûts, valeur créée, solidité des hypothèses économiques, sensibilité des résultats.
+question_cle: À quelles conditions cela devient-il intéressant ?
+criteres: [Valeur créée, Coût et soutenabilité financière]

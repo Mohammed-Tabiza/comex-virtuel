@@ -1,0 +1,8 @@
+id: risques
+version: 1
+nom: Risques
+titre: Risques et conformité
+initiales: RC
+mandat: Exposition juridique, contractuelle, sécurité et réglementaire, conditions de maîtrise.
+question_cle: Qu'est-ce qui pourrait rendre cette option inacceptable ?
+criteres: [Risques et conformité]
