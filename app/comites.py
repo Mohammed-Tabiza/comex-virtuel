@@ -391,6 +391,35 @@ def resoudre_composition(bib: Bibliotheque, config: dict, gabarit_id: str, *,
                        retraits_justifies={k: v for k, v in retraits.items() if k not in selection})
 
 
+def couverture_cadrage(composition: Composition, cadrage: dict | None) -> dict[str, list[str]]:
+    """Membres qui portent chaque critère validé : critères usuels de leur rôle, plus ceux désignés
+    par l'animateur au cadrage (limités aux experts présents). Une liste vide signale un critère sans porteur."""
+    cadrage = cadrage or {}
+    criteres = list(cadrage.get("criteres") or [])
+    par_role = composition.couverture(criteres)
+    designes: dict[str, set] = {}
+    for p in cadrage.get("porteurs_criteres") or []:
+        designes.setdefault(normaliser(str(p.get("critere", ""))), set()).update(
+            m for m in p.get("membres") or [] if m in composition.experts)
+    ordre = composition.experts
+    return {c: sorted(set(par_role[c]) | designes.get(normaliser(c), set()), key=ordre.index) for c in criteres}
+
+
+def difference(avant: Composition, apres: Composition) -> dict:
+    """Ce qui change entre deux compositions (révision à la validation)."""
+    ids_avant, ids_apres = set(avant.experts), set(apres.experts)
+    communs = [m.id for m in apres.membres if m.id in set(avant.ids())]
+    return {
+        "ajouts": [e for e in apres.experts if e not in ids_avant],
+        "retraits": [e for e in avant.experts if e not in ids_apres],
+        "modeles": {i: [avant.membre(i).modele, apres.membre(i).modele] for i in communs
+                    if avant.membre(i).modele != apres.membre(i).modele},
+        "mandats": [i for i in communs if avant.membre(i).mandat != apres.membre(i).mandat],
+        "retraits_justifies": {k: v for k, v in apres.retraits_justifies.items()
+                               if avant.retraits_justifies.get(k) != v},
+    }
+
+
 def modeles_externes(composition: Composition, config: dict) -> list[dict]:
     """Membres dont le modèle est hébergé hors de l'entreprise."""
     return [{"agent": m.id, "modele": m.modele, "libelle": config["modeles"][m.modele]["libelle"]}

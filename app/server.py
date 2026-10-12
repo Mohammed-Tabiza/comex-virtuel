@@ -2,6 +2,7 @@
 import asyncio
 import json
 import re
+import time
 import uuid
 from datetime import datetime
 from contextlib import asynccontextmanager
@@ -13,7 +14,9 @@ from langgraph.types import Command
 from pydantic import BaseModel
 
 from . import graph as G
-from .comites import Bibliotheque, Composition, ErreurComposition, modeles_externes, resoudre_composition
+from .comites import (Bibliotheque, Composition, ErreurComposition, couverture_cadrage, difference,
+                      modeles_externes, resoudre_composition)
+from .contexte import estimer_seance
 from .config import RACINE, charger_config
 from .dossier import charger_dossier
 from .llm import Modeles
@@ -48,9 +51,19 @@ class NouvelleSeance(BaseModel):
     retraits_justifies: dict[str, str] | None = None
 
 
+class Revision(BaseModel):
+    """Révision de l'équipe à la validation (le gabarit reste celui du lancement)."""
+    selection: list[str]
+    mandats: dict[str, str] | None = None
+    affectations: dict[str, str] | None = None
+    retraits_justifies: dict[str, str] | None = None
+    motif: str = ""
+
+
 class Validation(BaseModel):
     action: str = "valider"           # valider | recadrer
     complement: str = ""
+    composition_revisee: Revision | None = None
 
 
 class Decision(BaseModel):
@@ -79,7 +92,7 @@ async def _executer(seance: Seance, entree) -> None:
             seance.statut = "attente_validation"
             cad = {k: v for k, v in (snap.values.get("cadrage") or {}).items() if k != "_meta"}
             await seance.publier("phase", phase="validation")
-            await seance.publier("attente_validation", cadrage=cad)
+            await seance.publier("attente_validation", cadrage=cad, **_etat_validation(seance, cad))
         else:
             seance.statut = "terminee" if snap.values.get("synthese") else "erreur"
             await seance.publier("phase", phase="arbitrage" if seance.statut == "terminee" else "erreur")
@@ -88,6 +101,14 @@ async def _executer(seance: Seance, entree) -> None:
     except Exception as e:  # noqa: BLE001
         seance.statut = "erreur"
         await seance.publier("erreur", message=f"{type(e).__name__} : {e}")
+
+
+def _etat_validation(seance: Seance, cadrage: dict) -> dict:
+    """Ce que le décideur voit à la validation : équipe, couverture des critères, estimation du contexte."""
+    couverture = couverture_cadrage(seance.composition, cadrage)
+    return {"comite": _vue_composition(seance.composition), "couverture": couverture,
+            "criteres_sans_porteur": [c for c, membres in couverture.items() if not membres],
+            "contexte": seance.estimation}
 
 
 def _lancer(seance: Seance, entree) -> None:
@@ -212,6 +233,16 @@ def _blocage_confidentialite(dossier, composition: Composition) -> dict | None:
     }
 
 
+def _verifier(dossier, composition: Composition) -> None:
+    """Refuse une composition non conforme (confidentialité, endpoint manquant)."""
+    blocage = _blocage_confidentialite(dossier, composition)
+    if blocage:
+        raise HTTPException(403, blocage)
+    sans_endpoint = _modeles_sans_endpoint(composition)
+    if sans_endpoint:
+        raise HTTPException(422, {"code": "modele", "message": f"base_url manquante pour : {', '.join(sans_endpoint)}"})
+
+
 def _modeles_sans_endpoint(composition: Composition) -> list[str]:
     cfg = ETAT["config"]
     if cfg["mode"] != "reel":
@@ -240,7 +271,25 @@ async def dossier_detail(nom: str):
     dossier = charger_dossier(DOSSIERS / Path(nom).name)
     composition = _composer(dossier)
     return {**dossier.resume(), "gabarit": _gabarit_du_dossier(dossier),
-            "comite": _vue_composition(composition), "blocage": _blocage_confidentialite(dossier, composition)}
+            "comite": _vue_composition(composition), "blocage": _blocage_confidentialite(dossier, composition),
+            "contexte": estimer_seance(dossier.texte, composition, ETAT["config"])}
+
+
+@app.post("/api/dossiers/{nom}/composition")
+async def essayer_composition(nom: str, corps: NouvelleSeance):
+    """Évalue une composition sans lancer de séance : erreurs, blocage, estimation du contexte, couverture
+    des critères usuels du gabarit. Sert à l'écran de constitution."""
+    dossier = charger_dossier(DOSSIERS / Path(nom).name)
+    try:
+        composition = _composer(dossier, corps)
+    except ErreurComposition as e:
+        return {"valide": False, "erreurs": e.erreurs}
+    couverture = composition.couverture(composition.criteres_gabarit)
+    return {"valide": True, "erreurs": [], "comite": _vue_composition(composition),
+            "blocage": _blocage_confidentialite(dossier, composition),
+            "contexte": estimer_seance(dossier.texte, composition, ETAT["config"]),
+            "couverture_usuelle": couverture,
+            "criteres_usuels_sans_porteur": [c for c, m in couverture.items() if not m]}
 
 
 @app.get("/api/dossiers/{nom}/rejeux")
@@ -290,21 +339,17 @@ async def creer_seance(corps: NouvelleSeance):
         composition = _composer(dossier, corps)
     except ErreurComposition as e:
         raise HTTPException(422, {"code": "composition", "message": str(e), "erreurs": e.erreurs})
-    blocage = _blocage_confidentialite(dossier, composition)
-    if blocage:
-        raise HTTPException(403, blocage)
-    sans_endpoint = _modeles_sans_endpoint(composition)
-    if sans_endpoint:
-        raise HTTPException(422, {"code": "modele", "message": f"base_url manquante pour : {', '.join(sans_endpoint)}"})
+    _verifier(dossier, composition)
     seance = Seance(id=uuid.uuid4().hex[:8], dossier=dossier)
     seance.fixer_composition(composition)          # figée au lancement, propre à cette séance
+    seance.estimation = estimer_seance(dossier.texte, composition, ETAT["config"])
     SEANCES[seance.id] = seance
     budget = ETAT["config"]["protocole"]["budget_dossier_tokens"]
     await seance.publier("dossier_charge", dossier=dossier.resume(), budget=budget,
                          depassement=dossier.tokens_estimes > budget, mode=ETAT["config"]["mode"],
-                         comite=_vue_composition(composition))
+                         comite=_vue_composition(composition), contexte=seance.estimation)
     _lancer(seance, {"complement": ""})
-    return {"seance_id": seance.id}
+    return {"seance_id": seance.id, "contexte": seance.estimation}
 
 
 @app.get("/api/seances/{seance_id}/evenements")
@@ -330,11 +375,39 @@ async def valider(seance_id: str, corps: Validation):
     seance = _seance(seance_id)
     if seance.statut != "attente_validation":
         raise HTTPException(409, "La séance n'attend pas de validation")
+    if corps.action not in ("valider", "recadrer"):
+        raise HTTPException(422, "action : valider ou recadrer")
+    revision = None
+    if corps.composition_revisee:
+        # Révision de l'équipe : ajouter un expert ne demande pas de nouveau cadrage ; modifier options,
+        # contraintes ou critères passe par « recadrer ». L'équipe devient définitive avant les analyses.
+        r = corps.composition_revisee
+        try:
+            nouvelle = resoudre_composition(_bibliotheque(), ETAT["config"], seance.composition.gabarit_id,
+                                            selection=r.selection, mandats=r.mandats, affectations=r.affectations,
+                                            retraits_justifies=r.retraits_justifies)
+        except ErreurComposition as e:
+            raise HTTPException(422, {"code": "composition", "message": str(e), "erreurs": e.erreurs})
+        _verifier(seance.dossier, nouvelle)
+        ecarts = difference(seance.composition, nouvelle)
+        if any(ecarts.values()):
+            revision = {"numero": len(seance.revisions) + 1, "instant": round(time.time() - seance.debut, 2),
+                        "motif": r.motif.strip(), "avant": seance.composition.vers_dict(),
+                        "apres": nouvelle.vers_dict(), **ecarts}
+            seance.revisions.append(revision)
+            seance.fixer_composition(nouvelle)
+            seance.estimation = estimer_seance(seance.dossier.texte, nouvelle, ETAT["config"])
+            cad = {k: v for k, v in ((await _etat(seance_id)).get("cadrage") or {}).items() if k != "_meta"}
+            await seance.publier("composition_revisee", numero=revision["numero"], motif=revision["motif"],
+                                 **ecarts, **_etat_validation(seance, cad))
     await seance.publier("validation_humaine", action=corps.action, complement=corps.complement)
     if corps.action == "valider":
         await seance.publier("phase", phase="analyses")
-    _lancer(seance, Command(resume={"action": corps.action, "complement": corps.complement}))
-    return {"ok": True}
+    resume = {"action": corps.action, "complement": corps.complement}
+    if revision:
+        resume["revision"] = {k: v for k, v in revision.items() if k not in ("avant", "apres")}
+    _lancer(seance, Command(resume=resume))
+    return {"ok": True, "revision": revision is not None}
 
 
 @app.post("/api/seances/{seance_id}/decision")

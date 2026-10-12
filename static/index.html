@@ -181,6 +181,10 @@ textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--
 .fenetre h2{font-family:var(--serif);font-weight:600;font-size:20px;margin:0 0 4px}
 .fenetre .sous{color:var(--muted);font-size:13px;margin-bottom:12px}
 .alerte-q{border-left:3px solid var(--warn);padding:6px 10px;background:rgba(242,193,78,.08);border-radius:6px;margin:4px 0}
+.couverture{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;font-size:12.5px;margin-top:4px}
+.couverture .porteurs{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.porteur{border:1px solid var(--line-2);border-radius:999px;padding:0 7px;font-size:11px;color:var(--muted)}
+.porteur.aucun{border-color:rgba(242,193,78,.6);color:var(--warn)}
 
 /* section citée */
 .pop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,10,14,.55);z-index:20;padding:20px}
@@ -475,12 +479,16 @@ function traiter(e) {
     case "dossier_charge": majTokens(e.dossier.tokens_estimes, e.budget);
       // Chaque séance a son comité : les experts affichés sont ceux de la séance, pas ceux du comité par défaut
       if (e.comite) { S.config = {...S.config, agents: e.comite.agents, experts: e.comite.experts}; }
+      if (e.contexte && e.contexte.niveau !== "ok") note(texteContexte(e.contexte));
       if (e.depassement) note("Le dossier dépasse le budget de contexte configuré : les agents servis par les plus petits modèles risquent d'être tronqués."); break;
     case "phase": phase(e.phase); break;
     case "agent_statut": statut(e); break;
     case "agent_flux": flux(e); break;
     case "contribution": contribution(e); break;
-    case "attente_validation": ouvrirValidation(e.cadrage); break;
+    case "attente_validation": ouvrirValidation(e.cadrage, e); break;
+    case "composition_revisee": revisionEquipe(e); break;
+    case "contexte_compacte": note(`Contexte : le prompt « ${ETAPES[e.etape] || e.etape} » a été compacté (niveau ${e.niveau}) pour tenir dans le contexte du modèle (${e.entree.toLocaleString("fr-FR")} + ${e.sortie.toLocaleString("fr-FR")} tokens sur ${e.contexte_max.toLocaleString("fr-FR")}).`); break;
+    case "contexte_depasse": note(e.message); toast(e.message); break;
     case "validation_humaine": $("#voile").classList.remove("on");
       note(e.action === "valider" ? "Cadrage validé par le décideur. Les analyses indépendantes démarrent." : "Nouveau cadrage demandé par le décideur.", e.complement); break;
     case "seance_terminee": fin(e); break;
@@ -541,7 +549,8 @@ function contribution(e) {
       ${liste("Ce que j'ignore", c.inconnues)}${liste("Ce qui me ferait changer d'avis", c.conditions_changement)}</details>`;
   } else if (e.etape === "contre_analyse") {
     corps = `<p>${avecRefs(c.resume)}</p><details open><summary>Hypothèses fragiles et scénarios d'échec</summary>
-      ${liste("Hypothèses fragiles", c.hypotheses_fragiles, argumentSource)}${liste("Scénarios d'échec", c.scenarios_echec)}${liste("Angles morts", c.angles_morts)}</details>`;
+      ${liste("Hypothèses fragiles", c.hypotheses_fragiles, argumentSource)}${liste("Scénarios d'échec", c.scenarios_echec)}${liste("Angles morts", c.angles_morts)}</details>
+      ${c.critique_composition ? `<h4>Composition du comité</h4><p>${avecRefs(c.critique_composition.commentaire)}</p>${liste("Angles absents", c.critique_composition.angles_absents)}${liste("Voix surreprésentées", c.critique_composition.voix_surrepresentees)}` : ""}`;
   } else if (e.etape === "objections") {
     S.objections = c.objections; phase("reponses");
     S.liens = c.objections.map(o => o.cible); dessinerLiens();
@@ -588,7 +597,37 @@ function dessinerLiens() {
 }
 
 // ------------------------------------------------------------------ validation humaine
-function ouvrirValidation(c) {
+function texteContexte(x) {
+  const p = x.plus_exigeante;
+  return `Contexte : ${x.niveau === "depassement" ? "dépassement probable" : "marge réduite"} à l'étape « ${ETAPES[p.etape] || p.etape} » `
+    + `(environ ${p.total.toLocaleString("fr-FR")} tokens pour ${p.contexte_max.toLocaleString("fr-FR")}). `
+    + "Estimation prudente : un contrôle réel aura lieu avant cette étape, avec compactage si nécessaire.";
+}
+
+function blocCouverture(e) {
+  if (!e?.couverture) return "";
+  const lignes = Object.entries(e.couverture).map(([critere, membres]) => `<div>${esc(critere)}</div><div class="porteurs">${
+    membres.length ? membres.map(m => `<span class="porteur">${esc(S.config.agents[m]?.nom || m)}</span>`).join("")
+                   : `<span class="porteur aucun">sans porteur</span>`}</div>`).join("");
+  const manque = e.criteres_sans_porteur?.length;
+  return `<h4 style="font-size:12px;color:${manque ? "var(--warn)" : "var(--muted)"};margin:12px 0 4px">Couverture des critères${manque ? ` : ${manque} sans porteur` : ""}</h4>
+    <div class="couverture">${lignes}</div>`;
+}
+
+function revisionEquipe(e) {
+  const avant = S.config.agents;                       // les membres retirés ne figurent plus dans le nouveau comité
+  if (e.comite) { S.config = {...S.config, agents: e.comite.agents, experts: e.comite.experts}; creerSieges(); majLegende(); }
+  const nom = id => S.config.agents[id]?.nom || avant[id]?.nom || id;
+  const parts = [];
+  if (e.ajouts?.length) parts.push("ajout de " + e.ajouts.map(nom).join(", "));
+  if (e.retraits?.length) parts.push("retrait de " + e.retraits.map(nom).join(", "));
+  if (Object.keys(e.modeles || {}).length) parts.push("modèle changé pour " + Object.keys(e.modeles).map(nom).join(", "));
+  if (e.mandats?.length) parts.push("mandat modifié pour " + e.mandats.map(nom).join(", "));
+  const sans = e.criteres_sans_porteur?.length ? ` Critère${e.criteres_sans_porteur.length > 1 ? "s" : ""} désormais sans porteur : ${e.criteres_sans_porteur.join(", ")}.` : "";
+  note(`Équipe révisée par le décideur : ${parts.join(" ; ")}.${sans}`, e.motif);
+}
+
+function ouvrirValidation(c, e = {}) {
   $("#btnLancer").disabled = false;
   const manque = !c.suffisant;
   $("#fenValidation").innerHTML = `<h2>Validation du cadrage</h2>
@@ -596,7 +635,8 @@ function ouvrirValidation(c) {
     <div class="carte" style="--c:var(--brass)"><p style="margin:0;font-family:var(--serif);font-size:16px">${avecRefs(c.question_reformulee)}</p>
       <p style="color:var(--muted)">${avecRefs(c.decision_attendue)}</p>
       ${liste("Options", c.options, o => `<b>${esc(o.id)}</b> · ${esc(o.nom)} : ${avecRefs(o.description)}`)}
-      ${liste("Critères de décision", c.criteres)}${liste("Contraintes", c.contraintes)}${liste("Informations manquantes", c.informations_manquantes)}</div>
+      ${e.couverture ? "" : liste("Critères de décision", c.criteres)}${liste("Contraintes", c.contraintes)}${liste("Informations manquantes", c.informations_manquantes)}
+      ${blocCouverture(e)}</div>
     ${c.questions_pour_humain?.length ? `<h4 style="font-size:12px;color:var(--warn);margin:12px 0 4px">${manque ? "Informations indispensables" : "Questions du président"}</h4>${c.questions_pour_humain.map(q => `<div class="alerte-q">${avecRefs(q)}</div>`).join("")}` : ""}
     <h4 style="font-size:12px;color:var(--muted);margin:14px 0 6px">Vos précisions (transmises à tous les membres)</h4>
     <textarea id="complement" placeholder="Ex. : la renégociation avec l'éditeur est exclue ; un prestataire peut être financé sur le budget run…"></textarea>

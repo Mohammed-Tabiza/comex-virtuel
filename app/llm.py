@@ -62,7 +62,7 @@ class Modeles:
         debut = time.time()
         async with self.verrous[nom]:
             if self.simulation:
-                resultat, usage = await self._simuler(agent_id, etape, on_flux)
+                resultat, usage = await self._simuler(agent_id, etape, on_flux, schema)
             else:
                 if nom not in self.clients:
                     raise ErreurModele(f"Modèle {nom} : aucune base_url configurée")
@@ -126,8 +126,13 @@ class Modeles:
         return contenu, usage
 
     # ------------------------------------------------------------------ simulation
-    async def _simuler(self, agent_id: str, etape: str, on_flux: OnFlux):
+    async def _simuler(self, agent_id: str, etape: str, on_flux: OnFlux, schema: dict | None = None):
         resultat = simulation.reponse(agent_id, etape)
+        # Comme le ferait la sortie contrainte d'un vrai modèle : les objections ne visent que les experts de la séance
+        if etape == "objections" and schema:
+            cibles = schema["properties"]["objections"]["items"]["properties"]["cible"].get("enum")
+            if cibles:
+                resultat["objections"] = [o for o in resultat.get("objections", []) if o.get("cible") in cibles]
         mini, maxi = self.config["protocole"].get("simulation_duree", [3, 8])
         duree = random.uniform(mini, maxi)
         reflexion = simulation.reflexion(agent_id, etape)

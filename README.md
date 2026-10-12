@@ -144,6 +144,40 @@ curl -X POST localhost:8000/api/seances -H 'content-type: application/json' -d '
 ```
 
 `GET /api/comites` renvoie la bibliothèque (rôles, fonctions, gabarits).
+`POST /api/dossiers/<nom>/composition` évalue une composition sans lancer de séance : erreurs,
+blocage de confidentialité, estimation du contexte et couverture des critères usuels.
+
+### Validation : critères, couverture et révision de l'équipe
+
+Les critères découlent de la décision : l'animateur part des critères usuels du gabarit, écarte ceux qui
+ne s'appliquent pas et ajoute ceux que la décision exige. Il désigne pour chaque critère les membres qui le
+portent. À la validation, le décideur voit la **couverture** : les critères sans porteur sont signalés
+(alerte, pas blocage).
+
+L'équipe peut être révisée à la validation, avant les analyses ; la révision est tracée (ajouts, retraits,
+modèles et mandats changés, motif) dans l'état de la séance et dans le journal. Ajouter ou retirer un expert
+ne demande pas de nouveau cadrage ; modifier options, contraintes ou critères passe par « Demander un
+nouveau cadrage ». Une fois les analyses lancées, l'équipe est définitive.
+
+```bash
+curl -X POST localhost:8000/api/seances/<id>/validation -H 'content-type: application/json' -d '{
+  "action": "valider",
+  "composition_revisee": {"selection": ["finance", "risques", "operations", "rh"],
+                          "affectations": {"rh": "gpt_oss"}, "motif": "Décision budgétaire."}
+}'
+```
+
+Le contradicteur reçoit la composition et la conteste aussi (`critique_composition` : angles absents,
+voix surreprésentées).
+
+### Contexte : estimation au lancement, contrôle réel avant les étapes lourdes
+
+Au lancement, la longueur des contributions est inconnue : l'application estime prudemment
+(`protocole.estimation_tokens`) les appels les plus exigeants et renvoie un niveau `ok`, `attention` ou
+`depassement`. Avant les objections et la synthèse, le prompt réellement construit est mesuré, budget de
+sortie compris, puis corrigé par l'écart observé entre l'estimation et le comptage réel des appels précédents.
+S'il ne tient pas, les contributions sont compactées en deux niveaux ; s'il ne tient toujours pas, l'appel
+n'a pas lieu et la séance s'arrête avec un message explicite.
 
 ## Créer un nouveau dossier
 

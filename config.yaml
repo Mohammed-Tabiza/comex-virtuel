@@ -65,6 +65,9 @@ protocole:
   synthese_max_tokens: 6144
   # Taille maximale du dossier (en tokens estimés) avant avertissement
   budget_dossier_tokens: 15000
+  # Longueurs prudentes des contributions (tokens) pour estimer le contexte au lancement.
+  # Le contrôle réel a lieu avant les objections et la synthèse, avec compactage si nécessaire.
+  estimation_tokens: {cadrage: 900, avis: 1200, contre_analyse: 1300, objections: 900, reponse: 600}
   # json_schema : sortie contrainte par vLLM (recommandé)
   # consigne    : schéma donné dans le prompt uniquement (si json_schema pose problème)
   sortie_structuree: json_schema

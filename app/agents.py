@@ -28,6 +28,8 @@ SCHEMAS = {
         "decision_attendue": _TXT,
         "options": {"type": "array", "items": _obj({"id": _TXT, "nom": _TXT, "description": _TXT})},
         "criteres": _LISTE,
+        # Membres dont le mandat couvre chaque critère (désignés par l'animateur, contrôlés par le serveur)
+        "porteurs_criteres": {"type": "array", "items": _obj({"critere": _TXT, "membres": _LISTE})},
         "contraintes": _LISTE,
         "informations_manquantes": _LISTE,
         "questions_pour_humain": _LISTE,
@@ -49,6 +51,8 @@ SCHEMAS = {
         "hypotheses_fragiles": {"type": "array", "items": _ARG},
         "scenarios_echec": _LISTE,
         "angles_morts": _LISTE,
+        # Le contradicteur conteste aussi la composition du comité
+        "critique_composition": _obj({"angles_absents": _LISTE, "voix_surrepresentees": _LISTE, "commentaire": _TXT}),
     }),
     "objections": _obj({
         "objections": {"type": "array", "items": _obj({
@@ -141,11 +145,26 @@ def _membres(experts: list) -> str:
     return "\n".join(f"- {m.id} : {m.titre}" for m in experts)
 
 
-def prompt_cadrage(president, schema: dict, complement_humain: str) -> str:
-    texte = _role(president) + (
+def _membres_detail(experts: list) -> str:
+    return "\n".join(f"- {m.id} : {m.titre}. Mandat : {m.mandat} Critères usuels : {', '.join(m.criteres) or 'aucun'}."
+                     for m in experts)
+
+
+def prompt_cadrage(president, schema: dict, complement_humain: str, experts: list | None = None,
+                   criteres_usuels: list[str] | None = None) -> str:
+    texte = _role(president)
+    if criteres_usuels:
+        texte += _bloc("Critères usuels de ce type de comité (point de départ)", "\n".join(f"- {c}" for c in criteres_usuels))
+    if experts:
+        texte += _bloc("Membres du comité (identifiant : rôle)", _membres_detail(experts))
+    texte += (
         "## Tâche : cadrage\n"
         "Reformule la question à trancher, la décision attendue, les options (reprends celles du dossier, "
         "avec des identifiants courts A, B, C...), les critères de décision et les contraintes. "
+        "Les critères découlent de la décision et des contraintes, pas des membres présents : reprends mot pour mot "
+        "les critères usuels qui s'appliquent, écarte ceux qui ne s'appliquent pas et ajoute ceux que la décision exige. "
+        "Dans porteurs_criteres, indique pour chaque critère les identifiants des membres dont le mandat le couvre ; "
+        "laisse la liste vide si aucun membre ne le couvre, le décideur en sera averti. "
         "Liste les informations manquantes et les questions à poser au décideur. "
         "Mets suffisant à false seulement si une information est indispensable pour que l'analyse ait un sens.\n"
     )
@@ -166,11 +185,16 @@ def prompt_avis(membre, schema: dict, cadrage: dict, complement: str) -> str:
     ) + _schema(schema)
 
 
-def prompt_contre_analyse(contradicteur, schema: dict, cadrage: dict) -> str:
-    return _role(contradicteur) + _bloc("Cadrage validé", cadrage) + (
+def prompt_contre_analyse(contradicteur, schema: dict, cadrage: dict, experts: list | None = None) -> str:
+    texte = _role(contradicteur) + _bloc("Cadrage validé", cadrage)
+    if experts:
+        texte += _bloc("Composition du comité", _membres_detail(experts))
+    return texte + (
         "## Tâche : contre-analyse indépendante\n"
         "Sans connaître les avis des membres, identifie les hypothèses les plus fragiles du dossier, "
-        "les scénarios dans lesquels chaque option échouerait, et les angles morts du cadrage.\n"
+        "les scénarios dans lesquels chaque option échouerait, et les angles morts du cadrage. "
+        "Conteste aussi la composition du comité : quels angles ou parties prenantes manquent pour cette décision, "
+        "quelles voix sont surreprésentées (critique_composition). Une composition adaptée se dit en une phrase.\n"
     ) + _schema(schema)
 
 

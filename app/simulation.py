@@ -21,6 +21,13 @@ CADRAGE = {
     ],
     "criteres": ["Valeur démontrée", "Conformité contractuelle et réglementaire", "Capacité d'exécution en 2027",
                  "Coût complet sur 4 ans", "Acceptabilité sociale"],
+    "porteurs_criteres": [
+        {"critere": "Valeur démontrée", "membres": ["finance", "clients"]},
+        {"critere": "Conformité contractuelle et réglementaire", "membres": ["risques"]},
+        {"critere": "Capacité d'exécution en 2027", "membres": ["operations", "rh"]},
+        {"critere": "Coût complet sur 4 ans", "membres": ["finance"]},
+        {"critere": "Acceptabilité sociale", "membres": ["rh"]},
+    ],
     "contraintes": ["Aucune donnée client traitée hors UE [D0-§5]", "Investissement 2027 plafonné à 2 M€ [D0-§5]",
                     "Pas de généralisation avant la fin de la consultation du CSE [D0-§5]"],
     "informations_manquantes": ["Adoption hors volontaires [D0-§6]", "Capacité au-delà de 250 utilisateurs simultanés [D0-§6]",
@@ -137,6 +144,13 @@ CONTRE_ANALYSE = {
         "Aucune option hybride : interne pour les données clients, SaaS pour les usages sans données sensibles.",
         "Le coût de ne rien généraliser en 2027 n'est pas chiffré.",
     ],
+    "critique_composition": {
+        "angles_absents": ["Personne ne parle pour les collaborateurs non volontaires, qui seraient la majorité des "
+                           "utilisateurs en cas de généralisation [D1-§1] [D4-§1]."],
+        "voix_surrepresentees": [],
+        "commentaire": "Composition adaptée à une décision budgétaire ; l'angle des utilisateurs non volontaires "
+                       "reste à porter explicitement.",
+    },
 }
 
 OBJECTIONS = {"objections": [

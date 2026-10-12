@@ -130,7 +130,7 @@ class IsolationTests(unittest.TestCase):
             async def un_avis():
                 return await G.appeler({"configurable": {"thread_id": "seance03"}}, "rh", "avis",
                                        lambda m, sch: "consigne")
-            resultat, erreur = asyncio.run(un_avis())
+            resultat, erreur, _ = asyncio.run(un_avis())
         finally:
             SEANCES.pop("seance03", None)
         self.assertIsNone(erreur)
