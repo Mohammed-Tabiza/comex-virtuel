@@ -1,0 +1,10 @@
+id: equipes_produit
+version: 1
+nom: Équipes produit
+titre: Représentant des équipes produit
+initiales: EP
+mandat: >-
+  Besoins réels des équipes qui construisent les applications : délais d'accès, liberté de choix des
+  modèles, latence perçue par les utilisateurs, charge de travail induite.
+question_cle: Les équipes pourront-elles livrer plus vite, ou attendront-elles un guichet ?
+criteres: [Autonomie des équipes, Performance]

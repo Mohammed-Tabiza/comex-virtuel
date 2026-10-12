@@ -123,6 +123,27 @@ En mode réel, une séance sur un dossier confidentiel est refusée dès qu'un s
 modèle externe : le bouton est désactivé dans l'interface et l'API répond 403. L'en-tête affiche en
 permanence le statut du dossier et l'hébergement des modèles. Le mode simulation n'envoie aucune donnée.
 
+## Comités et dossiers d'exemple
+
+| Gabarit | Pour quelles décisions | Experts présélectionnés |
+|---|---|---|
+| COMEX | Décisions stratégiques engageant plusieurs directions | Stratégie, Finance, Clients, Opérations, Risques, RH |
+| Comité d'architecture | Choix techniques structurants | Architecture, Exploitation, RSSI, FinOps, Équipes produit, Data et IA |
+| Comité de pilotage | Arbitrages en cours de projet | Sponsor, PMO, Finance, Risques, Opérations |
+| Comité go/no-go | Mise en production, lancement, passage d'étape | Sponsor, PMO, Risques, Exploitation, RSSI |
+
+La bibliothèque compte 15 rôles ; tout rôle peut siéger dans n'importe quel comité. Les rôles marqués
+« obligatoire » dans l'écran de constitution ne se retirent qu'avec une justification écrite.
+
+Deux dossiers fictifs, non confidentiels, permettent de comparer deux comités sur le même protocole :
+- `assistant-ia-2027` (COMEX) : trajectoire 2027 d'un assistant d'IA générative interne ;
+- `plateforme-inference-llm` (comité d'architecture) : plateforme vLLM centrale, hébergement par équipe, ou
+  plateforme centrale avec déploiements dédiés. Le dossier contient des fragilités volontaires (taux
+  d'utilisation non mesuré, coûts d'exploitation omis, latence non testée, date limite fournisseur).
+
+En simulation, chaque dossier a son scénario préenregistré pour le comité présélectionné. Un rôle ajouté au
+comité, ou un dossier sans scénario, reçoit une réponse générique signalée comme telle.
+
 ## Bibliothèque des comités et affectation des modèles
 
 Les membres ne sont plus codés en dur : ils sont décrits dans `comites/`.

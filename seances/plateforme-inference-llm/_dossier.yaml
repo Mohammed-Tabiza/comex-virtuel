@@ -1,0 +1,5 @@
+# Métadonnées du dossier de séance (voir seances/assistant-ia-2027/_dossier.yaml).
+confidentiel: false
+description: "Cas fictif (Groupe Altaris) : décision d'architecture pour démonstration"
+# Comité présélectionné à l'ouverture de la séance (modifiable avant le lancement)
+gabarit: architecture

@@ -50,7 +50,7 @@ class Modeles:
                                                 timeout=600, max_retries=1)
 
     async def generer(self, agent_id: str, etape: str, messages: list[dict], on_flux: OnFlux, *,
-                      modele: str, thinking: bool, schema: dict) -> tuple[dict, dict]:
+                      modele: str, thinking: bool, schema: dict, scenario: str | None = None) -> tuple[dict, dict]:
         """Appelle le modèle affecté au membre par la composition de la séance.
 
         Rien n'est lu dans une table globale : modèle, mode réflexion et schéma viennent de la séance.
@@ -62,7 +62,7 @@ class Modeles:
         debut = time.time()
         async with self.verrous[nom]:
             if self.simulation:
-                resultat, usage = await self._simuler(agent_id, etape, on_flux, schema)
+                resultat, usage = await self._simuler(agent_id, etape, on_flux, schema, scenario)
             else:
                 if nom not in self.clients:
                     raise ErreurModele(f"Modèle {nom} : aucune base_url configurée")
@@ -126,8 +126,9 @@ class Modeles:
         return contenu, usage
 
     # ------------------------------------------------------------------ simulation
-    async def _simuler(self, agent_id: str, etape: str, on_flux: OnFlux, schema: dict | None = None):
-        resultat = simulation.reponse(agent_id, etape)
+    async def _simuler(self, agent_id: str, etape: str, on_flux: OnFlux, schema: dict | None = None,
+                       scenario: str | None = None):
+        resultat = simulation.reponse(agent_id, etape, scenario)
         # Comme le ferait la sortie contrainte d'un vrai modèle : les objections ne visent que les experts de la séance
         if etape == "objections" and schema:
             cibles = schema["properties"]["objections"]["items"]["properties"]["cible"].get("enum")

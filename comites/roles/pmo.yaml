@@ -1,0 +1,10 @@
+id: pmo
+version: 1
+nom: PMO
+titre: Direction de projet (PMO)
+initiales: PM
+mandat: >-
+  Planning, chemin critique, consommation du budget, dépendances entre lots, charge et disponibilité
+  des équipes, qualité du reporting.
+question_cle: Que dit vraiment le planning, une fois les dépendances prises en compte ?
+criteres: [Délais, Budget, Charge des équipes]

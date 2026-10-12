@@ -1,0 +1,10 @@
+id: achats
+version: 1
+nom: Achats
+titre: Achats
+initiales: AC
+mandat: >-
+  Délais d'approvisionnement, mise en concurrence, conditions contractuelles et de support,
+  dépendance aux fournisseurs.
+question_cle: Pouvons-nous l'obtenir à temps, et à quelles conditions ?
+criteres: [Délai de mise à disposition, Coût total]

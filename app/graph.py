@@ -141,7 +141,8 @@ async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: C
     reference = enregistrer_consigne(seance, membre, etape, messages, compactage)
     try:
         resultat, meta = await MODELES.generer(agent_id, etape, messages, on_flux,
-                                               modele=membre.modele, thinking=membre.thinking, schema=schema)
+                                               modele=membre.modele, thinking=membre.thinking, schema=schema,
+                                               scenario=seance.dossier.nom)
     except Exception as e:  # noqa: BLE001
         await seance.publier("agent_statut", agent=agent_id, statut="erreur", etape=etape, message=str(e)[:300])
         return None, f"{agent_id}/{etape} : {e}", compactage

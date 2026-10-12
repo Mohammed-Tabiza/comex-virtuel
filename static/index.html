@@ -76,6 +76,8 @@ svg.liens line{stroke:var(--mistral);stroke-width:1.6;stroke-dasharray:6 6;anima
 .s-nom{font-weight:600;font-size:13px;line-height:1.2}
 .s-mod{font-size:11px;color:var(--c)}
 .statut{margin-top:8px;display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted)}
+.statut .lib{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.statut .d{flex:none}
 .statut .d{width:7px;height:7px;border-radius:50%;background:var(--faint)}
 .st-analyse .d{background:var(--warn)} .st-reflexion .d{background:var(--think);animation:clign 1s infinite}
 .st-redaction .d{background:var(--c);animation:clign .6s infinite} .st-termine .d{background:var(--ok)} .st-erreur .d{background:var(--err)}
@@ -181,9 +183,9 @@ textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--
 .fenetre h2{font-family:var(--serif);font-weight:600;font-size:20px;margin:0 0 4px}
 .fenetre .sous{color:var(--muted);font-size:13px;margin-bottom:12px}
 .alerte-q{border-left:3px solid var(--warn);padding:6px 10px;background:rgba(242,193,78,.08);border-radius:6px;margin:4px 0}
-.couverture{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;font-size:12.5px;margin-top:4px}
-.couverture .porteurs{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
-.porteur{border:1px solid var(--line-2);border-radius:999px;padding:0 7px;font-size:11px;color:var(--muted)}
+.couverture{display:grid;grid-template-columns:minmax(110px,1fr) minmax(0,auto);gap:5px 10px;font-size:12.5px;margin-top:4px;align-items:start}
+.couverture .porteurs{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start}
+.porteur{border:1px solid var(--line-2);border-radius:999px;padding:0 7px;font-size:11px;color:var(--muted);white-space:nowrap;line-height:18px}
 .porteur.aucun{border-color:rgba(242,193,78,.6);color:var(--warn)}
 
 /* constitution et révision de l'équipe */
@@ -436,7 +438,7 @@ function creerSieges() {
     el.style.top = y + "%";
     el.style.setProperty("--c", couleur(id));
     el.innerHTML = `<div class="s-haut"><div class="avatar">${esc(a.initiales)}</div>
-        <div><div class="s-nom">${esc(a.titre)}</div><div class="s-mod">${esc(a.libelle_modele)}${a.thinking ? " · thinking" : ""}</div></div></div>
+        <div><div class="s-nom" title="${esc(a.titre)}">${esc(a.titre.length > 26 ? a.nom : a.titre)}</div><div class="s-mod">${esc(a.libelle_modele)}${a.thinking ? " · thinking" : ""}</div></div></div>
       <div class="statut st-attente"><span class="d"></span><span class="lib">En attente</span></div>
       <div class="extrait"></div><div class="s-bas"></div>`;
     zone.appendChild(el);
@@ -1041,8 +1043,14 @@ function coordonnees(options, positions) {
   }
   for (const [cle, ids] of Object.entries(cases)) {
     const [i, j] = cle.split("|").map(Number);
+    // Plus de trois membres au même endroit : deux rangées, pour que les points restent lisibles
+    const rangees = ids.length > 3 ? 2 : 1, parRangee = Math.ceil(ids.length / rangees);
+    const pas = Math.min(8, (79 / n) * 0.9 / parRangee);
     ids.forEach((id, k) => {
-      res[id] = {x: 19 + (i + 0.5) * (79 / n) + (k - (ids.length - 1) / 2) * Math.min(8, 60 / n / ids.length), y: 12 + j * 20};
+      const rangee = Math.floor(k / parRangee), rang = k % parRangee;
+      const dans = Math.min(parRangee, ids.length - rangee * parRangee);
+      res[id] = {x: 19 + (i + 0.5) * (79 / n) + (rang - (dans - 1) / 2) * pas,
+                 y: 12 + j * 20 + (rangees > 1 ? (rangee ? 4.5 : -4.5) : 0)};
     });
   }
   return res;
