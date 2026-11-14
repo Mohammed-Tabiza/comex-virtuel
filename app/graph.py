@@ -98,7 +98,7 @@ def sans_meta(contribution: dict | None) -> dict:
 
 
 # --------------------------------------------------------------------------- appel d'un agent
-async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: str):
+async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: str, schema: dict | None = None):
     seance = seance_de(config)
     messages = [
         {"role": "system", "content": A.prefixe_commun(seance.dossier.texte)},   # préfixe commun (cache vLLM)
@@ -121,7 +121,7 @@ async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: s
                                  extrait=texte_affiche[-240:], caracteres=len(tampons[nature]))
 
     try:
-        resultat, meta = await MODELES.generer(agent_id, etape, messages, on_flux)
+        resultat, meta = await MODELES.generer(agent_id, etape, messages, on_flux, schema=schema)
     except Exception as e:  # noqa: BLE001
         await seance.publier("agent_statut", agent=agent_id, statut="erreur", etape=etape, message=str(e)[:300])
         return None, f"{agent_id}/{etape} : {e}"
@@ -294,8 +294,7 @@ def _norm_id(valeur) -> str:
     return str(valeur or "").strip().upper()
 
 
-def _norm(texte) -> str:
-    return " ".join(str(texte or "").lower().split())
+_norm = A.normaliser
 
 
 def _lacune_troncature(t: dict) -> str:
@@ -336,7 +335,8 @@ async def synthese(state: Etat, config: RunnableConfig):
     res, err = await appeler(config, "president", "synthese",
                              A.prompt_synthese(sans_meta(state["cadrage"]), avis, sans_meta(state.get("contre_analyse")),
                                                state.get("objections", []), reponses,
-                                               sans_meta(state.get("replique")), lacunes))
+                                               sans_meta(state.get("replique")), lacunes),
+                             schema=A.schema_synthese(sans_meta(state["cadrage"])))
     suivi = _suivi(res, err, "president", "synthese")
     if not res:
         return {"lacunes": lacunes, **suivi}

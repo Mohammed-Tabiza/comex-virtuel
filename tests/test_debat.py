@@ -30,9 +30,11 @@ class ModelesTest(Modeles):
         self.remplacements = remplacements or {}   # {(agent, etape): [réponse 1, réponse 2...]}
         self.tronques = set(tronques)              # {(agent, etape)} : le « serveur » coupe le message
         self.appels: list[tuple[str, str, str]] = []
+        self.schemas: dict = {}
 
-    async def generer(self, agent_id, etape, messages, on_flux):
+    async def generer(self, agent_id, etape, messages, on_flux, schema=None):
         self.appels.append((agent_id, etape, messages[-1]["content"]))
+        self.schemas[(agent_id, etape)] = schema
         if (agent_id, etape) in self.pannes:
             raise RuntimeError("panne simulée")
         meta = {"modele": "test", "libelle": "Test", "duree": 0}
@@ -174,6 +176,85 @@ class GardeFousTests(unittest.TestCase):
         messages = [{"role": "system", "content": "x" * 20000}, {"role": "user", "content": "y"}]
         with self.assertRaisesRegex(ErreurModele, "contexte_max 4096"):
             asyncio.run(modeles.generer("president", "synthese", messages, None))
+
+
+class ModelesFlux(Modeles):
+    """Mode réel sans réseau : les textes renvoyés par le « serveur » sont fournis à l'avance."""
+
+    def __init__(self, textes: list[str]):
+        config = charger_config()
+        config["mode"] = "reel"
+        super().__init__(config)
+        self.textes, self.messages_recus = list(textes), []
+
+    async def _flux(self, client, modele, thinking, etape, messages, mode, on_flux, schema):
+        self.messages_recus.append(messages)
+        return self.textes.pop(0), {"tokens_entree": 10, "tokens_sortie": 10}
+
+
+class SchemaTests(unittest.TestCase):
+    """Cas observés lors de la séance réelle 51538050 (Nemotron, contexte 32k)."""
+
+    def setUp(self):
+        import json
+        self.json = json
+        bonne = simulation.reponse("president", "synthese")
+        mauvaise = {("recommendation" if k == "recommandation" else k): v for k, v in bonne.items()}
+        self.bonne, self.mauvaise = bonne, mauvaise
+
+    def test_un_champ_traduit_est_un_ecart_au_schema(self):
+        from app.agents import ecarts_schema, schema_synthese
+        schema = schema_synthese(simulation.CADRAGE)
+        self.assertEqual(ecarts_schema(self.bonne, schema), [])
+        ecarts = ecarts_schema(self.mauvaise, schema)
+        self.assertIn("réponse : champ obligatoire « recommandation » absent", ecarts)
+        self.assertIn("réponse : champ inconnu « recommendation »", ecarts)
+
+    def test_une_reponse_non_conforme_est_relancee_puis_acceptee(self):
+        modeles = ModelesFlux([self.json.dumps(self.mauvaise), self.json.dumps(self.bonne)])
+        messages = [{"role": "system", "content": "dossier"}, {"role": "user", "content": "synthèse"}]
+        resultat, _ = asyncio.run(modeles.generer("president", "synthese", messages, None))
+        self.assertIn("recommandation", resultat)
+        relance = modeles.messages_recus[1][-1]["content"]
+        self.assertIn("ne respecte pas le schéma", relance)
+        self.assertIn("« recommandation » absent", relance)
+
+    def test_deux_reponses_non_conformes_sont_une_erreur(self):
+        from app.llm import ErreurModele
+        modeles = ModelesFlux([self.json.dumps(self.mauvaise)] * 2)
+        with self.assertRaisesRegex(ErreurModele, "non conforme au schéma après deux tentatives"):
+            asyncio.run(modeles.generer("president", "synthese", [{"role": "user", "content": "x"}], None))
+
+    def test_la_synthese_est_contrainte_par_le_cadrage(self):
+        from app.agents import prompt_synthese, schema_synthese
+        schema = schema_synthese(simulation.CADRAGE)
+        option = schema["properties"]["options"]["items"]["properties"]
+        self.assertEqual(option["id"]["enum"], ["A", "B", "C"])
+        self.assertEqual(option["criteres"]["items"]["properties"]["critere"]["enum"], simulation.CADRAGE["criteres"])
+        self.assertNotIn("enum", SCHEMAS_SYNTHESE_ID())             # le schéma générique n'est pas modifié
+        self.assertIn('"Valeur démontrée"', prompt_synthese(simulation.CADRAGE, {}, {}, [], {}))
+        modeles = ModelesTest()
+        derouler(modeles, "sc000001")
+        self.assertEqual(modeles.schemas[("president", "synthese")], schema)
+
+    def test_les_differences_typographiques_ne_sont_pas_des_lacunes(self):
+        from app.agents import normaliser
+        self.assertEqual(normaliser("Taux d’adoption réel hors pilote"), normaliser("Taux d'adoption réel  hors pilote"))
+        self.assertEqual(normaliser("Budget IT 2027 ≤ 2 M€"), normaliser("budget it 2027 ≤ 2 M€"))
+
+    def test_les_reponses_de_simulation_respectent_leur_schema(self):
+        from app.agents import SCHEMAS, ecarts_schema, schema_synthese
+        for etape in ("cadrage", "contre_analyse", "objections", "replique"):
+            self.assertEqual(ecarts_schema(simulation.reponse("contradicteur", etape), SCHEMAS[etape]), [], etape)
+        for agent in EXPERTS:
+            for etape in ("avis", "reponse"):
+                self.assertEqual(ecarts_schema(simulation.reponse(agent, etape), SCHEMAS[etape]), [], (agent, etape))
+        self.assertEqual(ecarts_schema(self.bonne, schema_synthese(simulation.CADRAGE)), [])
+
+
+def SCHEMAS_SYNTHESE_ID():
+    from app.agents import SCHEMAS
+    return SCHEMAS["synthese"]["properties"]["options"]["items"]["properties"]["id"]
 
 
 if __name__ == "__main__":

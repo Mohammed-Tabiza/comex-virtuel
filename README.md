@@ -66,6 +66,11 @@ Pour revenir à la simulation, définissez `$env:COMEX_MODE = "simulation"` puis
    une réponse qui ne cite pas les objections reçues (O4...), une synthèse qui omet une option ou un critère du
    cadrage, ou qui cite des sources hors dossier.
 
+**Conformité des réponses.** Chaque réponse est vérifiée contre son schéma JSON (champs obligatoires, noms de
+champs, valeurs autorisées) ; une réponse non conforme est relancée une fois avec la liste des écarts, puis
+traitée comme une erreur. Le schéma de la synthèse impose les identifiants d'option et les libellés exacts des
+critères validés au cadrage (les différences de typographie sont tolérées).
+
 **Contexte des modèles.** Ollama coupe sans erreur tout message plus long que le `num_ctx` du modèle
 (4 096 tokens par défaut). Donnez à chaque modèle un contexte suffisant (une synthèse fait ~15 000 tokens) :
 

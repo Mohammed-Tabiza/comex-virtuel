@@ -12,7 +12,7 @@ from typing import Awaitable, Callable
 
 from openai import AsyncOpenAI
 
-from .agents import SCHEMAS
+from .agents import SCHEMAS, ecarts_schema
 from .dossier import estimer_tokens
 from . import simulation
 
@@ -60,7 +60,9 @@ class Modeles:
             max_tokens = self.config["protocole"].get("synthese_max_tokens", max_tokens)
         return max_tokens
 
-    async def generer(self, agent_id: str, etape: str, messages: list[dict], on_flux: OnFlux) -> tuple[dict, dict]:
+    async def generer(self, agent_id: str, etape: str, messages: list[dict], on_flux: OnFlux,
+                      schema: dict | None = None) -> tuple[dict, dict]:
+        """schema : schéma propre à cet appel (ex. synthèse contrainte par le cadrage), sinon celui de l'étape."""
         nom, modele, thinking = self.modele_de(agent_id)
         estimes = estimer_tokens("".join(m["content"] for m in messages))
         if not self.simulation:
@@ -74,20 +76,26 @@ class Modeles:
             if self.simulation:
                 resultat, usage = await self._simuler(agent_id, etape, on_flux)
             else:
-                resultat, usage = await self._appeler(nom, modele, thinking, etape, messages, on_flux)
+                resultat, usage = await self._appeler(nom, modele, thinking, etape, messages, on_flux,
+                                                      schema or SCHEMAS[etape])
         meta = {"modele": nom, "libelle": modele["libelle"], "duree": round(time.time() - debut, 1),
                 "tokens_estimes": estimes, "simulation": self.simulation, **usage}
         return resultat, meta
 
     # ------------------------------------------------------------------ appel réel
     async def _appeler(self, nom: str, modele: dict, thinking: bool, etape: str, messages: list[dict],
-                       on_flux: OnFlux):
+                       on_flux: OnFlux, schema: dict):
+        """Appel avec contrôle de la réponse : JSON valide ET conforme au schéma, sinon une relance corrective.
+
+        La sortie contrainte du serveur n'est pas une garantie (constaté avec Ollama : un champ
+        « recommendation » au lieu de « recommandation ») : la conformité est vérifiée ici.
+        """
         client = self.clients[nom]
         mode = self.sortie
         for tentative in range(2):
             try:
-                texte, usage = await self._flux(client, modele, thinking, etape, messages, mode, on_flux)
-                return extraire_json(texte), usage
+                texte, usage = await self._flux(client, modele, thinking, etape, messages, mode, on_flux, schema)
+                resultat = extraire_json(texte)
             except json.JSONDecodeError:
                 if tentative == 1:
                     raise ErreurModele("Réponse non conforme au format JSON après deux tentatives")
@@ -95,19 +103,31 @@ class Modeles:
                                         "Ta réponse précédente n'était pas un JSON valide. "
                                         "Réponds uniquement par l'objet JSON demandé."}]
                 mode = "consigne"
+                continue
             except Exception as e:  # noqa: BLE001 - on tente une fois sans sortie contrainte
                 if tentative == 1 or mode == "consigne":
                     raise ErreurModele(f"{type(e).__name__} : {e}") from e
                 mode = "consigne"
+                continue
+            ecarts = ecarts_schema(resultat, schema)
+            if not ecarts:
+                return resultat, usage
+            if tentative == 1:
+                raise ErreurModele("Réponse non conforme au schéma après deux tentatives : " + " ; ".join(ecarts[:5]))
+            messages = messages + [
+                {"role": "assistant", "content": texte},
+                {"role": "user", "content": "Ta réponse ne respecte pas le schéma demandé :\n- "
+                 + "\n- ".join(ecarts[:10]) + "\nRenvoie l'objet JSON complet corrigé, avec exactement les noms "
+                 "de champs et les valeurs autorisées du schéma, sans texte autour."}]
 
-    async def _flux(self, client, modele, thinking, etape, messages, mode, on_flux):
+    async def _flux(self, client, modele, thinking, etape, messages, mode, on_flux, schema=None):
         max_tokens = self.max_tokens_de(modele, etape)
         params = dict(model=modele["model"], messages=messages, stream=True,
                       temperature=modele.get("temperature", 0.6), max_tokens=max_tokens,
                       stream_options={"include_usage": True})
         if mode == "json_schema":
             params["response_format"] = {"type": "json_schema",
-                                         "json_schema": {"name": etape, "schema": SCHEMAS[etape], "strict": True}}
+                                         "json_schema": {"name": etape, "schema": schema or SCHEMAS[etape], "strict": True}}
         if modele.get("famille") == "qwen":
             params["extra_body"] = {"chat_template_kwargs": {"enable_thinking": thinking}}
 

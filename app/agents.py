@@ -1,5 +1,7 @@
 """Membres du COMEX, schémas de contribution et construction des prompts."""
+import copy
 import json
+import unicodedata
 
 AGENTS = {
     "president": {
@@ -142,6 +144,60 @@ SCHEMAS = {
     }),
 }
 
+
+
+def ecarts_schema(valeur, schema: dict, chemin: str = "") -> list[str]:
+    """Écarts d'une réponse à son schéma JSON (sous-ensemble utilisé ici : object, array, string,
+    integer, boolean, enum, required, additionalProperties). Liste vide si la réponse est conforme."""
+    ici = chemin or "réponse"
+    attendu = schema.get("type")
+    if attendu == "object":
+        if not isinstance(valeur, dict):
+            return [f"{ici} : objet attendu"]
+        ecarts = [f"{ici} : champ obligatoire « {c} » absent" for c in schema.get("required", []) if c not in valeur]
+        proprietes = schema.get("properties", {})
+        if schema.get("additionalProperties") is False:
+            ecarts += [f"{ici} : champ inconnu « {c} »" for c in valeur if c not in proprietes]
+        for c, sous in proprietes.items():
+            if c in valeur:
+                ecarts += ecarts_schema(valeur[c], sous, f"{chemin}.{c}" if chemin else c)
+        return ecarts
+    if attendu == "array":
+        if not isinstance(valeur, list):
+            return [f"{ici} : liste attendue"]
+        return [e for i, x in enumerate(valeur) for e in ecarts_schema(x, schema.get("items", {}), f"{ici}[{i}]")]
+    types = {"string": str, "boolean": bool, "integer": int}
+    if attendu in types and (not isinstance(valeur, types[attendu])
+                             or (attendu == "integer" and isinstance(valeur, bool))):
+        return [f"{ici} : {attendu} attendu"]
+    # Une différence de typographie (apostrophe courbe, espace insécable) n'est pas un écart
+    if "enum" in schema and normaliser(valeur) not in {normaliser(v) for v in schema["enum"]}:
+        return [f"{ici} : « {valeur} » n'est pas une valeur autorisée ({', '.join(map(str, schema['enum']))})"]
+    return []
+
+
+def normaliser(texte) -> str:
+    """Forme comparable d'un libellé : sans différences de typographie, de casse ni d'espaces."""
+    texte = unicodedata.normalize("NFKC", str(texte or ""))
+    for typo, simple in (("’", "'"), ("‘", "'"), ("«", '"'), ("»", '"'), ("–", "-"), ("—", "-")):
+        texte = texte.replace(typo, simple)
+    return " ".join(texte.lower().split())
+
+
+def schema_synthese(cadrage: dict) -> dict:
+    """Schéma de synthèse contraint par le cadrage validé : identifiants d'option et libellés de critère
+    imposés, pour qu'ils ne puissent pas être reformulés."""
+    schema = copy.deepcopy(SCHEMAS["synthese"])
+    option = schema["properties"]["options"]["items"]["properties"]
+    ids = [o["id"] for o in cadrage.get("options", []) if o.get("id")]
+    criteres = [c for c in cadrage.get("criteres", []) if c]
+    if ids:
+        option["id"] = {"type": "string", "enum": ids}
+    if criteres:
+        option["criteres"]["items"]["properties"]["critere"] = {"type": "string", "enum": criteres}
+    return schema
+
+
 # --------------------------------------------------------------------------- prompts
 
 def prefixe_commun(dossier_texte: str) -> str:
@@ -175,8 +231,8 @@ def _role(agent_id: str) -> str:
     return f"## Ton rôle : {a['titre']}\n{a['mandat']}\n"
 
 
-def _schema(etape: str) -> str:
-    return _bloc("Format de réponse (schéma JSON)", SCHEMAS[etape])
+def _schema(etape: str, schema: dict | None = None) -> str:
+    return _bloc("Format de réponse (schéma JSON)", schema or SCHEMAS[etape])
 
 
 def prompt_cadrage(complement_humain: str) -> str:
@@ -288,5 +344,6 @@ def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections:
         "exprimés dans leurs réactions. Si des contributions manquent, signale-le dans les incertitudes et ne "
         "présente jamais comme un accord un sujet sur lequel un membre absent ne s'est pas exprimé. "
         "N'invente ni score numérique ni pondération ; conserve les désaccords et les informations manquantes. "
-        "Ne présente jamais un nombre d'avis favorables comme une preuve.\n"
-    ) + _schema("synthese")
+        "Ne présente jamais un nombre d'avis favorables comme une preuve. "
+        "Les noms de champs sont imposés par le schéma, en français (recommandation...) : ne les traduis pas.\n"
+    ) + _schema("synthese", schema_synthese(cadrage))
