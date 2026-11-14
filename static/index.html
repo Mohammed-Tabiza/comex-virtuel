@@ -267,13 +267,14 @@ textarea{width:100%;min-height:80px;background:var(--bg);border:1px solid var(--
 const ANGLES = {president:-90, strategie:-38, finance:5, clients:47, contradicteur:90, operations:133, risques:175, rh:-142};
 const RX = 36.5, RY = 41;   // rayons de l'ellipse des sièges, en % de la zone
 const PHASES = [["cadrage","Cadrage"],["validation","Validation humaine"],["analyses","Analyses indépendantes"],
-  ["contradiction","Contradiction"],["reponses","Réponses"],["synthese","Synthèse"],["arbitrage","Arbitrage"]];
+  ["contradiction","Contradiction"],["reponses","Réponses"],["replique","Réplique"],["synthese","Synthèse"],["arbitrage","Arbitrage"]];
 // Une couleur par modèle, attribuée dans l'ordre de config.yaml (quels que soient les noms des modèles)
 const PALETTE = ["#8b97ff", "#ff8f45", "#3fc7b5", "#e58bd0", "#c9a25c"];
 let COULEURS = {};
 const NIVEAUX = ["favorable", "favorable_sous_conditions", "reserve", "defavorable"];
 const NIVEAUX_COURTS = {favorable:"Favorable", favorable_sous_conditions:"Sous conditions", reserve:"Réservé", defavorable:"Défavorable"};
-const ETAPES = {cadrage:"Cadrage", avis:"Avis initial", contre_analyse:"Contre-analyse", objections:"Objections", reponse:"Réponse", synthese:"Synthèse"};
+const ETAPES = {cadrage:"Cadrage", avis:"Avis initial", contre_analyse:"Contre-analyse", objections:"Objections", reponse:"Réponse", replique:"Réplique", synthese:"Synthèse"};
+const STATUTS_OBJ = {resolue:"Résolue", partiellement_resolue:"Partiellement résolue", non_resolue:"Non résolue"};
 const POS = {favorable:"Favorable", favorable_sous_conditions:"Favorable s/ conditions", reserve:"Réservé", defavorable:"Défavorable"};
 const STATUTS = {attente:"En attente", analyse:"Lecture du dossier", reflexion:"Réflexion", redaction:"Rédaction", termine:"Terminé", erreur:"Erreur"};
 
@@ -417,7 +418,7 @@ function reinitialiser(config) {
   S.jetonRejeu++;                                   // interrompt un rejeu en cours
   S.config = config; definirCouleurs(); majLegende();
   Object.assign(S, {avis:{}, reponses:{}, objections:[], cadrage:null, synthese:null, contributions:0, tokens:0, t:0, phase:null,
-    posInit:{}, posFin:{}, positionsVues:false, liens:[]});
+    posInit:{}, posFin:{}, positionsVues:false, liens:[], lacunes:[]});
   creerSieges(); dessinerLiens();
   document.querySelectorAll(".etape").forEach(el => el.className = "etape");
   $("#vue-debat").innerHTML = ""; $("#nDebat").textContent = ""; $("#nPositions").textContent = "";
@@ -539,8 +540,8 @@ function contribution(e) {
     corps = `<p>${avecRefs(c.resume)}</p><details open><summary>Hypothèses fragiles et scénarios d'échec</summary>
       ${liste("Hypothèses fragiles", c.hypotheses_fragiles, argumentSource)}${liste("Scénarios d'échec", c.scenarios_echec)}${liste("Angles morts", c.angles_morts)}</details>`;
   } else if (e.etape === "objections") {
-    S.objections = c.objections; phase("reponses");
-    S.liens = c.objections.map(o => o.cible); dessinerLiens();
+    S.objections = [...S.objections, ...c.objections]; phase("reponses");   // une relance complète la liste
+    S.liens = S.objections.map(o => o.cible); dessinerLiens();
     corps = c.objections.map(o => `<div class="obj"><span class="id">${esc(o.id)}</span><div><b>→ ${esc(nomAgent(o.cible))}</b> ${argumentSource(o)}</div></div>`).join("");
   } else if (e.etape === "reponse") {
     S.reponses[id] = c;
@@ -549,7 +550,10 @@ function contribution(e) {
     if (!S.positionsVues) { S.positionsVues = true; ouvrirOnglet("positions"); }
     if (S.avis[id]) el.querySelector(".s-bas").innerHTML = `<span class="pos ${S.avis[id].position}" style="opacity:.55">${POS[S.avis[id].position]}</span>→<span class="pos ${c.position_revisee}">${POS[c.position_revisee]}</span>`;
     corps = c.reponses.map(r => `<div class="obj"><span class="id">${esc(r.objection_id)}</span><div><span class="att ${r.attitude}">${esc(r.attitude)}</span> ${avecRefs(r.texte)}</div></div>`).join("") +
+      liste("Réactions aux autres membres", c.reactions_pairs, x => `<b>${x.accord === "accord" ? "Accord" : "Désaccord"} avec ${esc(nomAgent(x.membre))}</b> : ${avecRefs(x.texte)}`) +
       `<p style="color:var(--muted)">Position révisée : <span class="pos ${c.position_revisee}">${POS[c.position_revisee]}</span></p>`;
+  } else if (e.etape === "replique") {
+    corps = `<p>${avecRefs(c.resume)}</p>` + c.evaluations.map(v => `<div class="obj"><span class="id">${esc(v.objection_id)}</span><div><b>${esc(STATUTS_OBJ[v.statut] || v.statut)}</b> ${avecRefs(v.commentaire)}</div></div>`).join("");
   } else if (e.etape === "synthese") {
     S.synthese = c;
     corps = `<p>${avecRefs(c.recommandation)}</p><p><a href="#" onclick="ouvrirOnglet('decision');return false" style="color:var(--brass)">Ouvrir le dossier de décision →</a></p>`;
@@ -621,6 +625,8 @@ function fin(e) {
   $("#choixDossier").disabled = false;
   document.querySelectorAll(".siege").forEach(s => s.classList.remove("actif"));
   if (e.erreurs?.length) note("Incidents pendant la séance : " + e.erreurs.join(" ; "));
+  S.lacunes = e.lacunes || [];
+  if (S.lacunes.length) note("Débat incomplet : " + S.lacunes.join(" "));
   if (!S.synthese) return toast("La séance s'est terminée sans synthèse.");
   $("#phaseTxt").textContent = "Arbitrage humain";
   rendreDecision(); ouvrirOnglet("decision");
@@ -631,8 +637,9 @@ function rendreDecision() {
   const s = S.synthese;
   const lignes = Object.keys(S.avis).map(id => { const a = S.avis[id], r = S.reponses[id];
     return `<tr><td><span style="color:${couleur(id)}">●</span> ${esc(S.config.agents[id].nom)}</td><td>${esc(a.option_preferee)}</td>
-      <td><span class="pos ${a.position}">${POS[a.position]}</span></td><td>${r ? `${esc(r.option_revisee || a.option_preferee)} · <span class="pos ${r.position_revisee}">${POS[r.position_revisee]}</span>` : "<span style='color:var(--faint)'>sans objection</span>"}</td></tr>`; }).join("");
+      <td><span class="pos ${a.position}">${POS[a.position]}</span></td><td>${r ? `${esc(r.option_revisee || a.option_preferee)} · <span class="pos ${r.position_revisee}">${POS[r.position_revisee]}</span>` : "<span style='color:var(--err)'>sans réponse à la contradiction</span>"}</td></tr>`; }).join("");
   $("#vue-decision").innerHTML = `
+    ${S.lacunes?.length ? `<div class="note" style="border-color:var(--err)"><b>Débat incomplet</b> : cette synthèse a été produite malgré des contributions manquantes.<ul>${S.lacunes.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
     <div class="reco">${avecRefs(s.recommandation)}</div>
     ${Object.keys(S.posFin).length ? `<p><a href="#" onclick="ouvrirOnglet('positions');rejouerEvolution();return false" style="color:var(--brass)">Voir comment le débat a fait évoluer les positions →</a></p>` : ""}
     ${vueCriteres(s)}

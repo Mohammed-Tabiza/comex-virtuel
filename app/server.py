@@ -74,13 +74,21 @@ async def _executer(seance: Seance, entree) -> None:
             await seance.publier("phase", phase="validation")
             await seance.publier("attente_validation", cadrage=cad)
         else:
-            seance.statut = "terminee" if snap.values.get("synthese") else "erreur"
-            await seance.publier("phase", phase="arbitrage" if seance.statut == "terminee" else "erreur")
-            await seance.publier("seance_terminee", statut=seance.statut, erreurs=snap.values.get("erreurs", []))
+            seance.statut = statut_final(snap.values)
+            await seance.publier("phase", phase="erreur" if seance.statut == "erreur" else "arbitrage")
+            await seance.publier("seance_terminee", statut=seance.statut, erreurs=snap.values.get("erreurs", []),
+                                 lacunes=snap.values.get("lacunes", []))
             _sauvegarder(seance, snap.values)          # après les derniers événements : le rejeu est complet
     except Exception as e:  # noqa: BLE001
         seance.statut = "erreur"
         await seance.publier("erreur", message=f"{type(e).__name__} : {e}")
+
+
+def statut_final(etat: dict) -> str:
+    """terminee : débat complet ; incomplete : synthèse produite malgré des contributions manquantes."""
+    if not etat.get("synthese"):
+        return "erreur"
+    return "incomplete" if etat.get("lacunes") else "terminee"
 
 
 def _lancer(seance: Seance, entree) -> None:

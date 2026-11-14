@@ -5,6 +5,8 @@ from .agents import AGENTS
 
 POSITIONS = {"favorable": "Favorable", "favorable_sous_conditions": "Favorable sous conditions",
              "reserve": "Réservé", "defavorable": "Défavorable"}
+STATUTS_OBJECTION = {"resolue": "résolue", "partiellement_resolue": "partiellement résolue",
+                     "non_resolue": "non résolue"}
 
 
 def _liste(items) -> str:
@@ -17,7 +19,11 @@ def compte_rendu(seance, etat: dict) -> str:
     l = [f"# Compte rendu du COMEX virtuel : {seance.dossier.nom}",
          f"*Séance {seance.id}, {datetime.now():%d/%m/%Y %H:%M}. COMEX consultatif : ce document prépare un arbitrage humain.*",
          "", "## Question", cad.get("question_reformulee", ""), "",
-         f"**Décision attendue :** {cad.get('decision_attendue', '')}", "", "## Options"]
+         f"**Décision attendue :** {cad.get('decision_attendue', '')}", ""]
+    if etat.get("lacunes"):
+        l += ["> **Débat incomplet.** La synthèse a été produite malgré des contributions manquantes :",
+              *[f"> - {x}" for x in etat["lacunes"]], ""]
+    l += ["## Options"]
     l += [f"- **{o['id']}. {o['nom']}** : {o['description']}" for o in cad.get("options", [])]
 
     l += ["", "## Recommandation conditionnelle", syn.get("recommandation", "(synthèse non disponible)"), "",
@@ -51,11 +57,21 @@ def compte_rendu(seance, etat: dict) -> str:
     for r in (etat.get("reponses") or {}).values():
         for item in r.get("reponses", []):
             reponses[item["objection_id"]] = item
+    evaluations = {e["objection_id"]: e for e in (etat.get("replique") or {}).get("evaluations", [])}
     for o in etat.get("objections") or []:
         r = reponses.get(o["id"])
         l.append(f"- **{o['id']} → {AGENTS[o['cible']]['nom']}** : {o['texte']}")
-        if r:
-            l.append(f"  - *{r['attitude']}* : {r['texte']}")
+        l.append(f"  - *{r['attitude']}* : {r['texte']}" if r else "  - *sans réponse*")
+        if o["id"] in evaluations:
+            ev = evaluations[o["id"]]
+            l.append(f"  - Réplique du contradicteur — **{STATUTS_OBJECTION.get(ev['statut'], ev['statut'])}** : "
+                     f"{ev['commentaire']}")
+    reactions = [(cle.split(":")[0], x) for cle, r in (etat.get("reponses") or {}).items()
+                 for x in r.get("reactions_pairs", [])]
+    if reactions:
+        l += ["", "## Échanges entre membres"]
+        l += [f"- **{AGENTS[a]['nom']} → {AGENTS[x['membre']]['nom']}** ({x['accord']}) : {x['texte']}"
+              for a, x in reactions if x.get("membre") in AGENTS]
     l += ["", "## Décision humaine", seance.decision_humaine or "(non renseignée)"]
     if etat.get("erreurs"):
         l += ["", "## Incidents", _liste(etat["erreurs"])]

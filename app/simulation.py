@@ -145,34 +145,61 @@ OBJECTIONS = {"objections": [
     {"id": "O3", "cible": "operations", "texte": "Si l'infrastructure se dégrade à 74 utilisateurs simultanés, l'option C à 600 utilisateurs pose le même problème. Que proposes-tu concrètement ?", "sources": ["D1-§2", "D2-§3"]},
     {"id": "O4", "cible": "clients", "texte": "Une relecture obligatoire peut absorber le gain de temps déclaré. Ton option A sous condition reste-t-elle rentable ?", "sources": ["D1-§3", "D1-§4"]},
     {"id": "O5", "cible": "rh", "texte": "Tu supposes que le CSE acceptera une extension progressive. Passer à 600 personnes ne déclenche-t-il pas déjà la consultation ?", "sources": ["D0-§5", "D4-§2"]},
+    {"id": "O6", "cible": "risques", "texte": "Tu écartes B pour le support hors UE, mais A et C ont déjà connu deux saisies de données sensibles. Pourquoi le risque interne serait-il plus maîtrisable que le risque contractuel ?", "sources": ["D1-§4", "D3-§2"]},
 ]}
 
 REPONSES = {
     "finance": {"reponses": [{"objection_id": "O1", "attitude": "concede",
                               "texte": "Exact, le scénario à 50 % est illustratif. Condition proposée : mesurer pendant l'option C le temps de traitement sur un groupe témoin non volontaire [D1-§3]."}],
+                "reactions_pairs": [{"membre": "strategie", "accord": "desaccord", "texte": "Afficher A comme cible 2027 engage 1,9 M€ sans gain mesuré : la valeur n'est pas démontrée [D2-§1]."},
+                                    {"membre": "operations", "accord": "accord", "texte": "Le test de charge conditionne aussi le coût complet : sans lui, le chiffrage de A n'est pas fiable [D1-§2]."}],
                 "position_revisee": "favorable_sous_conditions",
                 "option_revisee": "C",
                 "resume": "Option C maintenue, avec un protocole de mesure objectif comme condition de passage à A."},
     "strategie": {"reponses": [{"objection_id": "O2", "attitude": "ajuste",
                                 "texte": "Le dossier ne contient pas de retour client. Je retire l'argument comme fait établi et propose de sonder les trois grands comptes [D3-§1]."}],
+                  "reactions_pairs": [{"membre": "finance", "accord": "accord", "texte": "Une mesure sur groupe témoin rendrait l'argument stratégique de A vérifiable [D1-§3]."},
+                                      {"membre": "rh", "accord": "desaccord", "texte": "Attendre la fin de la consultation ne doit pas figer la cible : on peut l'annoncer sans la déployer [D0-§5]."}],
                   "position_revisee": "favorable_sous_conditions",
                 "option_revisee": "C",
                   "resume": "A reste la cible stratégique, mais C est la bonne décision pour décembre."},
     "operations": {"reponses": [{"objection_id": "O3", "attitude": "maintient",
                                  "texte": "C n'est acceptable que si le test de charge précède l'extension : passage à 600 par paliers de 150, avec le renforcement prévu au budget C [D2-§3]."}],
+                   "reactions_pairs": [{"membre": "strategie", "accord": "desaccord", "texte": "Une généralisation en 2027 est irréaliste tant que la capacité au-delà de 74 utilisateurs simultanés n'est pas prouvée [D1-§2]."}],
                    "position_revisee": "favorable_sous_conditions",
                 "option_revisee": "C",
                    "resume": "Favorable à C à condition d'une montée en charge par paliers après test."},
     "clients": {"reponses": [{"objection_id": "O4", "attitude": "ajuste",
                               "texte": "La relecture peut être ciblée : obligatoire pour les grands comptes, par échantillonnage ailleurs [D1-§4]."}],
+                "reactions_pairs": [{"membre": "risques", "accord": "accord", "texte": "La relecture obligatoire pour les grands comptes répond directement au risque de résiliation [D3-§1]."}],
                 "position_revisee": "favorable_sous_conditions",
                 "option_revisee": "C",
                 "resume": "Je me rallie à C : la relecture ciblée doit être mesurée avant de viser A."},
     "rh": {"reponses": [{"objection_id": "O5", "attitude": "concede",
                          "texte": "Oui, une extension significative justifie la consultation : il faut saisir le CSE dès janvier, ce qui reste compatible avec C mais pas avec une généralisation en 2027 [D4-§2]."}],
+           "reactions_pairs": [{"membre": "strategie", "accord": "desaccord", "texte": "Annoncer A comme cible avant l'avis du CSE serait perçu comme un fait accompli [D4-§2]."}],
            "position_revisee": "favorable_sous_conditions",
                 "option_revisee": "C",
            "resume": "C avec saisine du CSE en janvier 2027."},
+    "risques": {"reponses": [{"objection_id": "O6", "attitude": "ajuste",
+                              "texte": "Le risque interne est maîtrisable par des mesures que l'entreprise contrôle : filtrage des données sensibles et formation obligatoire [D3-§4]. Le risque contractuel de B dépend d'un avenant que l'éditeur n'a pas accordé [D3-§2]."}],
+                "reactions_pairs": [{"membre": "clients", "accord": "accord", "texte": "La relecture ciblée est cohérente avec les engagements des grands comptes [D3-§1]."},
+                                    {"membre": "strategie", "accord": "desaccord", "texte": "Un argument commercial fondé sur l'hébergement interne suppose d'abord l'absence d'incident : il n'est pas acquis [D1-§4]."}],
+                "position_revisee": "favorable_sous_conditions",
+                "option_revisee": "C",
+                "resume": "C acceptable si le filtrage des données sensibles est en place avant l'extension."},
+}
+
+REPLIQUE = {
+    "evaluations": [
+        {"objection_id": "O1", "statut": "resolue", "commentaire": "Finance concède et propose une mesure vérifiable sur groupe témoin."},
+        {"objection_id": "O2", "statut": "partiellement_resolue", "commentaire": "L'argument est retiré comme fait, mais le sondage des grands comptes n'est ni daté ni budgété."},
+        {"objection_id": "O3", "statut": "resolue", "commentaire": "La montée par paliers après test de charge répond au risque de saturation."},
+        {"objection_id": "O4", "statut": "partiellement_resolue", "commentaire": "La relecture ciblée est plausible, mais son coût en temps n'est pas mesuré."},
+        {"objection_id": "O5", "statut": "resolue", "commentaire": "RH reconnaît la consultation et propose une saisine en janvier."},
+        {"objection_id": "O6", "statut": "non_resolue", "commentaire": "Le filtrage est annoncé comme condition, sans preuve qu'il empêche les saisies observées pendant le pilote."},
+    ],
+    "resume": "Trois objections levées, deux partiellement, une non résolue : la maîtrise des données sensibles reste à démontrer.",
 }
 
 SYNTHESE = {
@@ -250,6 +277,7 @@ REFLEXIONS = {
     "contre_analyse": "Je cherche les hypothèses sur lesquelles reposent toutes les options. Le pilote porte sur des volontaires, les gains sont déclaratifs, la capacité n'a pas été testée…",
     "objections": "Je compare chaque avis à ma contre-analyse. Je retiens les arguments qui pèsent le plus sur la décision et qui reposent sur une hypothèse non démontrée…",
     "reponse": "Je relis l'objection qui m'est adressée. Est-elle fondée au regard du dossier ? Je décide de maintenir, d'ajuster ou de concéder…",
+    "replique": "Je relis chaque objection et la réponse reçue. La réponse apporte-t-elle un élément vérifiable, ou seulement un engagement ?",
     "synthese": "Je rassemble les avis, la contre-analyse et les réponses. Je repère les points d'accord, les désaccords qui persistent après contradiction, et les conditions qui reviennent chez plusieurs membres…",
 }
 
@@ -265,6 +293,7 @@ def reponse(agent_id: str, etape: str) -> dict:
         "contre_analyse": CONTRE_ANALYSE,
         "objections": OBJECTIONS,
         "reponse": REPONSES.get(agent_id),
+        "replique": REPLIQUE,
         "synthese": SYNTHESE,
     }
     return copy.deepcopy(table[etape] or _generique(etape))
@@ -275,5 +304,5 @@ def _generique(etape: str) -> dict:
         return {"position": "reserve", "option_preferee": "A", "resume": "[Simulation] Avis générique.",
                 "arguments": [], "hypotheses": [], "risques": [], "inconnues": [], "conditions_changement": [], "confiance": 2}
     if etape == "reponse":
-        return {"reponses": [], "position_revisee": "reserve", "option_revisee": "A", "resume": "[Simulation] Réponse générique."}
+        return {"reponses": [], "reactions_pairs": [], "position_revisee": "reserve", "option_revisee": "A", "resume": "[Simulation] Réponse générique."}
     return {}

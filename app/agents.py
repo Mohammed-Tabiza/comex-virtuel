@@ -105,8 +105,21 @@ SCHEMAS = {
             "attitude": {"type": "string", "enum": ["maintient", "ajuste", "concede"]},
             "texte": _TXT,
         })},
+        "reactions_pairs": {"type": "array", "items": _obj({
+            "membre": {"type": "string", "enum": EXPERTS},
+            "accord": {"type": "string", "enum": ["accord", "desaccord"]},
+            "texte": _TXT,
+        })},
         "position_revisee": _POSITION,
         "option_revisee": _TXT,
+        "resume": _TXT,
+    }),
+    "replique": _obj({
+        "evaluations": {"type": "array", "items": _obj({
+            "objection_id": _TXT,
+            "statut": {"type": "string", "enum": ["resolue", "partiellement_resolue", "non_resolue"]},
+            "commentaire": _TXT,
+        })},
         "resume": _TXT,
     }),
     "synthese": _obj({
@@ -200,29 +213,64 @@ def prompt_contre_analyse(cadrage: dict) -> str:
 
 
 def prompt_objections(cadrage: dict, contre_analyse: dict, avis: dict) -> str:
+    membres = ", ".join(avis)
     return _role("contradicteur") + _bloc("Cadrage", cadrage) + _bloc("Ta contre-analyse", contre_analyse) + \
         _bloc("Avis des membres", avis) + (
         "## Tâche : objections\n"
-        "Formule de 3 à 6 objections précises, chacune adressée à un membre (champ cible). "
-        "Vise les arguments les plus importants pour la décision, pas les détails. "
+        f"Chaque membre qui a rendu un avis ({membres}) doit recevoir au moins une objection (champ cible) : "
+        "personne n'échappe à la contradiction. Tu peux en adresser plusieurs au même membre si son argument "
+        "pèse lourd dans la décision. Vise les arguments les plus importants pour la décision, pas les détails. "
         "Numérote les identifiants O1, O2...\n"
     ) + _schema("objections")
 
 
-def prompt_reponse(agent_id: str, avis_propre: dict, objections: list) -> str:
+def prompt_objections_complement(cadrage: dict, contre_analyse: dict, avis_manquants: dict,
+                                 deja: list, premier_numero: int) -> str:
+    """Relance du contradicteur pour les membres qu'il n'a pas challengés au premier passage."""
+    return _role("contradicteur") + _bloc("Cadrage", cadrage) + _bloc("Ta contre-analyse", contre_analyse) + \
+        _bloc("Objections déjà formulées", deja) + _bloc("Avis des membres non encore challengés", avis_manquants) + (
+        "## Tâche : objections complémentaires\n"
+        "Ces membres n'ont reçu aucune objection. Formule au moins une objection précise pour chacun d'eux "
+        "(champ cible), sur l'argument de son avis le plus déterminant pour la décision. "
+        f"Numérote à partir de O{premier_numero}.\n"
+    ) + _schema("objections")
+
+
+def prompt_reponse(agent_id: str, avis_propre: dict, objections: list, autres_avis: dict) -> str:
     return _role(agent_id) + _bloc("Ton avis initial", avis_propre) + \
-        _bloc("Objections qui te sont adressées", objections) + (
-        "## Tâche : réponse aux objections\n"
+        _bloc("Objections qui te sont adressées", objections) + \
+        _bloc("Avis initiaux des autres membres (désormais connus)", autres_avis) + (
+        "## Tâche : réponse aux objections et aux autres membres\n"
         "Pour chaque objection, indique si tu maintiens ta position, l'ajustes ou concèdes, avec une justification "
-        "sourcée. Concéder un point fondé est une qualité, pas une faiblesse. Donne ta position révisée et l'identifiant "
-        "de l'option que tu préfères désormais (option_revisee), qui peut rester la même.\n"
+        "sourcée. Concéder un point fondé est une qualité, pas une faiblesse. "
+        "Réagis ensuite aux avis des autres membres qui touchent ton mandat (reactions_pairs) : dis avec qui tu es "
+        "en accord ou en désaccord et pourquoi, au moins un désaccord s'il en existe un réel ; pas de politesse. "
+        "Donne enfin ta position révisée et l'identifiant de l'option que tu préfères désormais "
+        "(option_revisee), qui peut rester la même.\n"
     ) + _schema("reponse")
 
 
-def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections: list, reponses: dict) -> str:
-    return _role("president") + _bloc("Cadrage", cadrage) + _bloc("Avis initiaux", avis) + \
+def prompt_replique(objections: list, reponses: dict) -> str:
+    return _role("contradicteur") + _bloc("Tes objections", objections) + \
+        _bloc("Réponses des membres", reponses) + (
+        "## Tâche : réplique\n"
+        "Pour chaque objection, juge si la réponse du membre la lève : resolue (réponse sourcée et convaincante), "
+        "partiellement_resolue (ajustement insuffisant ou condition non vérifiable) ou non_resolue (position "
+        "maintenue sans élément nouveau, ou absence de réponse). Justifie en une ou deux phrases. "
+        "Ne cède pas par courtoisie : une concession formelle sans engagement vérifiable reste partielle.\n"
+    ) + _schema("replique")
+
+
+def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections: list, reponses: dict,
+                    replique: dict | None = None, lacunes: list | None = None) -> str:
+    texte = _role("president") + _bloc("Cadrage", cadrage) + _bloc("Avis initiaux", avis) + \
         _bloc("Contre-analyse", contre_analyse) + _bloc("Objections", objections) + \
-        _bloc("Réponses aux objections", reponses) + (
+        _bloc("Réponses aux objections et réactions entre membres", reponses)
+    if replique:
+        texte += _bloc("Réplique du contradicteur (statut de chaque objection)", replique)
+    if lacunes:
+        texte += _bloc("Lacunes du débat (contributions manquantes)", lacunes)
+    return texte + (
         "## Tâche : synthèse pour le décideur\n"
         "Restitue les options avec leurs arguments pour et contre, les accords, les désaccords persistants "
         "(en nommant les positions), les hypothèses fragiles et les informations à obtenir. "
@@ -232,7 +280,10 @@ def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections:
         "Sépare les preuves documentées des objections et des incertitudes. Une preuve est un fait du dossier "
         "accompagné de ses sources, pas un avis d'agent. Une source existante ne garantit pas qu'elle prouve "
         "l'affirmation : vérifie le contenu. Sans preuve, utilise inconnu et une liste de sources vide. "
-        "Relie les objections aux échanges (O1, O2...) et indique celles qui restent non résolues. "
+        "Relie les objections aux échanges (O1, O2...) et indique celles qui restent non résolues, en partant de la "
+        "réplique du contradicteur ; si tu t'en écartes, dis pourquoi. Restitue les désaccords entre membres "
+        "exprimés dans leurs réactions. Si des contributions manquent, signale-le dans les incertitudes et ne "
+        "présente jamais comme un accord un sujet sur lequel un membre absent ne s'est pas exprimé. "
         "N'invente ni score numérique ni pondération ; conserve les désaccords et les informations manquantes. "
         "Ne présente jamais un nombre d'avis favorables comme une preuve.\n"
     ) + _schema("synthese")

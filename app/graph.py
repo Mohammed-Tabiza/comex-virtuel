@@ -2,12 +2,16 @@
 
     cadrage ─▶ validation humaine ─┬─▶ recadrer ─▶ cadrage
                                    └─▶ 6 avis experts ‖ contre-analyse   (en parallèle, à l'aveugle)
-                                         ─▶ objections du contradicteur
-                                         ─▶ réponses des experts visés   (en parallèle)
+                                         ─▶ objections du contradicteur (au moins une par expert,
+                                            relance pour les experts oubliés)
+                                         ─▶ réponses des experts         (en parallèle ; chacun voit
+                                            désormais les avis des autres et y réagit)
+                                         ─▶ réplique du contradicteur    (statut de chaque objection)
                                          ─▶ synthèse du président ─▶ fin (arbitrage humain dans l'interface)
 
 Principes : chaque contribution est attribuée et jamais réécrite ; le contexte de chaque appel
-est construit explicitement (un expert ne voit pas l'avis des autres au premier tour).
+est construit explicitement (un expert ne voit pas l'avis des autres au premier tour). Les
+contributions manquantes sont listées (lacunes) : une séance lacunaire n'est pas présentée comme complète.
 """
 import operator
 import re
@@ -32,6 +36,7 @@ LIBELLES = {
     "contre_analyse": "Contre-analyse indépendante",
     "objections": "Formulation des objections",
     "reponse": "Réponse aux objections",
+    "replique": "Réplique aux réponses",
     "synthese": "Synthèse pour le décideur",
 }
 
@@ -56,7 +61,9 @@ class Etat(TypedDict, total=False):
     contre_analyse: dict
     objections: list
     reponses: Annotated[dict, fusion_contributions]
+    replique: dict
     synthese: dict
+    lacunes: list
     erreurs: Annotated[list, operator.add]
 
 
@@ -66,6 +73,7 @@ class Tache(TypedDict, total=False):
     cadrage: dict
     complement: str
     avis_propre: dict
+    autres_avis: dict
     objections: list
 
 
@@ -153,33 +161,109 @@ async def contre_analyse(tache: Tache, config: RunnableConfig):
     return {"contre_analyse": res, **_erreur(err)} if res else _erreur(err)
 
 
+def _avis_par_expert(state: Etat) -> dict:
+    return {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("avis", {}).items()}
+
+
+def _recevables(brutes: list, avis: dict, deja: list) -> tuple[list, list]:
+    """Objections adressées à un expert qui a rendu un avis ; identifiants rendus uniques.
+
+    Renvoie (objections retenues, messages d'incident pour les objections écartées).
+    """
+    retenues, incidents = [], []
+    ids = {o["id"] for o in deja}
+    for o in brutes:
+        cible = str(o.get("cible", "")).strip().lower()
+        if cible not in avis:
+            incidents.append(f"contradicteur/objections : objection {o.get('id', '?')} écartée, cible inconnue "
+                             f"ou sans avis ({o.get('cible')!r})")
+            continue
+        o = {**o, "cible": cible}
+        if not o.get("id") or o["id"] in ids:
+            o["id"] = f"O{len(deja) + len(retenues) + 1}"
+            while o["id"] in ids:
+                o["id"] += "b"
+        ids.add(o["id"])
+        retenues.append(o)
+    return retenues, incidents
+
+
 async def challenge(state: Etat, config: RunnableConfig):
     await seance_de(config).publier("phase", phase="contradiction")
-    avis = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("avis", {}).items()}
-    res, err = await appeler(config, "contradicteur", "objections",
-                             A.prompt_objections(sans_meta(state["cadrage"]), sans_meta(state.get("contre_analyse")), avis))
-    if not res:
-        return {"objections": [], **_erreur(err)}
-    # On ne garde que les objections adressées à un expert qui a effectivement rendu un avis
-    objections = [o for o in res.get("objections", []) if o.get("cible") in avis]
-    return {"objections": objections}
+    avis = _avis_par_expert(state)
+    cadrage_, contre = sans_meta(state["cadrage"]), sans_meta(state.get("contre_analyse"))
+    erreurs: list = []
+    res, err = await appeler(config, "contradicteur", "objections", A.prompt_objections(cadrage_, contre, avis))
+    if err:
+        erreurs.append(err)
+    objections, incidents = _recevables((res or {}).get("objections", []), avis, [])
+    erreurs += incidents
+
+    # Couverture : chaque expert ayant rendu un avis doit être challengé ; relance ciblée sinon.
+    manquants = {e: v for e, v in avis.items() if e not in {o["cible"] for o in objections}}
+    if manquants and res:
+        res2, err2 = await appeler(config, "contradicteur", "objections",
+                                   A.prompt_objections_complement(cadrage_, contre, manquants, objections,
+                                                                  len(objections) + 1))
+        if err2:
+            erreurs.append(err2)
+        complement, incidents = _recevables((res2 or {}).get("objections", []), manquants, objections)
+        objections += complement
+        erreurs += incidents
+    return {"objections": objections, "erreurs": erreurs}
 
 
 async def reponse_expert(tache: Tache, config: RunnableConfig):
     agent_id = tache["agent_id"]
     res, err = await appeler(config, agent_id, "reponse",
-                             A.prompt_reponse(agent_id, tache["avis_propre"], tache["objections"]))
+                             A.prompt_reponse(agent_id, tache["avis_propre"], tache["objections"],
+                                              tache.get("autres_avis", {})))
     return {"reponses": {f"{agent_id}:reponse": res}, **_erreur(err)} if res else _erreur(err)
+
+
+async def replique(state: Etat, config: RunnableConfig):
+    await seance_de(config).publier("phase", phase="replique")
+    reponses = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("reponses", {}).items()}
+    res, err = await appeler(config, "contradicteur", "replique",
+                             A.prompt_replique(state.get("objections", []), reponses))
+    return {"replique": res, **_erreur(err)} if res else _erreur(err)
+
+
+def lacunes_du_debat(state: Etat) -> list[str]:
+    """Ce qui manque pour que le débat soit complet : chaque absence est nommée."""
+    lacunes = []
+    avis = _avis_par_expert(state)
+    for e in A.EXPERTS:
+        if e not in avis:
+            lacunes.append(f"{A.AGENTS[e]['nom']} n'a pas rendu d'avis : son mandat n'est pas couvert.")
+    if not state.get("contre_analyse"):
+        lacunes.append("La contre-analyse indépendante du contradicteur est absente.")
+    objections = state.get("objections", [])
+    if avis and not objections:
+        lacunes.append("Aucune objection n'a été formulée : le débat contradictoire n'a pas eu lieu.")
+    elif objections:
+        cibles = {o["cible"] for o in objections}
+        for e in avis:
+            if e not in cibles:
+                lacunes.append(f"{A.AGENTS[e]['nom']} n'a reçu aucune objection.")
+        repondants = {cle.split(":")[0] for cle in state.get("reponses", {})}
+        for e in sorted(cibles - repondants):
+            lacunes.append(f"{A.AGENTS[e]['nom']} n'a pas répondu aux objections qui lui étaient adressées.")
+        if not state.get("replique"):
+            lacunes.append("La réplique du contradicteur est absente : le statut des objections n'est pas évalué.")
+    return lacunes
 
 
 async def synthese(state: Etat, config: RunnableConfig):
     await seance_de(config).publier("phase", phase="synthese")
-    avis = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("avis", {}).items()}
+    avis = _avis_par_expert(state)
     reponses = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("reponses", {}).items()}
+    lacunes = lacunes_du_debat(state)
     res, err = await appeler(config, "president", "synthese",
                              A.prompt_synthese(sans_meta(state["cadrage"]), avis, sans_meta(state.get("contre_analyse")),
-                                               state.get("objections", []), reponses))
-    return {"synthese": res, **_erreur(err)} if res else _erreur(err)
+                                               state.get("objections", []), reponses,
+                                               sans_meta(state.get("replique")), lacunes))
+    return {"synthese": res, "lacunes": lacunes, **_erreur(err)} if res else {"lacunes": lacunes, **_erreur(err)}
 
 
 # --------------------------------------------------------------------------- routage
@@ -194,13 +278,19 @@ def apres_validation(state: Etat):
     return [Send("expert", {**base, "agent_id": e}) for e in A.EXPERTS] + [Send("contre_analyse", base)]
 
 
+def _resume_avis(avis: dict) -> dict:
+    return {k: avis.get(k) for k in ("position", "option_preferee", "resume", "arguments")}
+
+
 def apres_challenge(state: Etat):
+    avis = _avis_par_expert(state)
     par_cible: dict[str, list] = {}
     for o in state.get("objections", []):
         par_cible.setdefault(o["cible"], []).append(o)
-    envois = [Send("reponse_expert", {"agent_id": cible, "objections": objs,
-                                      "avis_propre": sans_meta(state["avis"].get(f"{cible}:initial"))})
-              for cible, objs in par_cible.items()]
+    envois = [Send("reponse_expert", {
+        "agent_id": cible, "objections": objs, "avis_propre": avis[cible],
+        "autres_avis": {e: _resume_avis(v) for e, v in avis.items() if e != cible},
+    }) for cible, objs in par_cible.items()]
     return envois or "synthese"
 
 
@@ -212,6 +302,7 @@ def construire_graphe():
     g.add_node("contre_analyse", contre_analyse)
     g.add_node("challenge", challenge)
     g.add_node("reponse_expert", reponse_expert)
+    g.add_node("replique", replique)
     g.add_node("synthese", synthese)
 
     g.add_edge(START, "cadrage")
@@ -220,7 +311,8 @@ def construire_graphe():
     g.add_edge("expert", "challenge")              # challenge attend la fin de toutes les branches parallèles
     g.add_edge("contre_analyse", "challenge")
     g.add_conditional_edges("challenge", apres_challenge, ["reponse_expert", "synthese"])
-    g.add_edge("reponse_expert", "synthese")
+    g.add_edge("reponse_expert", "replique")       # la réplique attend toutes les réponses
+    g.add_edge("replique", "synthese")
     g.add_edge("synthese", END)
     # Prototype : sauvegarde en mémoire. Pour reprendre une séance après redémarrage,
     # remplacer par SqliteSaver / PostgresSaver (paquets langgraph-checkpoint-sqlite / -postgres).

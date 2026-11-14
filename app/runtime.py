@@ -14,7 +14,7 @@ from .dossier import Dossier
 class Seance:
     id: str
     dossier: Dossier
-    statut: str = "creee"            # creee | en_cours | attente_validation | terminee | erreur
+    statut: str = "creee"            # creee | en_cours | attente_validation | terminee | incomplete | erreur
     debut: float = field(default_factory=time.time)
     decision_humaine: str = ""
     evenements: list[dict] = field(default_factory=list)
