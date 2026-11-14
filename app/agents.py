@@ -419,7 +419,8 @@ def correction_attributions(attributions: list, positions: dict) -> str:
                  "\n".join(f"- {x}" for x in attributions) +
                  "\nOptions finales de chaque membre (elles font foi, ne les confonds pas avec les avis initiaux) : " +
                  ", ".join(f"{n} → {o}" for n, o in finales.items()) +
-                 ".\nRefais la synthèse complète en rangeant chaque membre, dans chaque désaccord, sur son option finale.")
+                 ".\nRefais la synthèse complète en rangeant chaque membre, dans chaque désaccord, sur son option finale, "
+                 "dans un seul camp : n'oppose jamais un membre à lui-même (son avis initial à sa position finale).")
 
 
 def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections: list, reponses: dict,

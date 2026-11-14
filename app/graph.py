@@ -420,7 +420,7 @@ def attributions_inexactes(synthese: dict, positions: dict, options: list) -> li
     ids = {str(o.get("id", "")).strip().upper() for o in options}
     ecarts = []
     for d in synthese.get("desaccords", []):
-        texte, debut = str(d.get("positions", "")), 0
+        texte, debut, camps = str(d.get("positions", "")), 0, {}
         # Chaque « (option X » ferme un camp : ses membres sont le texte depuis la fin du camp précédent, quel que
         # soit le séparateur (« vs. », « contre », « ; », « . »). Constaté : « Finance (Option A : …). Stratégie (…) ».
         for m in OPTION_CAMP.finditer(texte):
@@ -432,10 +432,15 @@ def attributions_inexactes(synthese: dict, positions: dict, options: list) -> li
                 continue
             option = m.group(1).upper()
             for e in membres:
+                camps[e] = camps.get(e, 0) + 1
                 finale = str((positions.get(e) or {}).get("option_finale") or "").strip().upper()
                 if finale and finale != option:
                     ecarts.append(f"La synthèse range {A.AGENTS[e]['nom']} sur l'option {option} dans le désaccord "
                                   f"« {d.get('sujet', '')} », alors que sa position finale est l'option {finale}.")
+        # Constaté (c009e434) : « Risques (Option C : …) vs Risques (Option C : …) », avis initial contre position finale
+        ecarts += [f"La synthèse oppose {A.AGENTS[e]['nom']} à lui-même dans le désaccord « {d.get('sujet', '')} » : "
+                   f"un membre ne figure que dans un camp, avec sa position finale."
+                   for e, n in camps.items() if n > 1]
     return ecarts
 
 
@@ -478,7 +483,7 @@ async def synthese(state: Etat, config: RunnableConfig):
         # range un membre sur son option initiale. Une relance, avec les erreurs nommées, avant d'en faire une lacune.
         await seance.publier("relance", agent="president", etape="synthese",
                              message="Synthèse relancée : des désaccords attribuaient à des membres une autre option "
-                                     "que leur position finale.", details=attributions)
+                                     "que leur position finale, ou les opposaient à eux-mêmes.", details=attributions)
         res2, err2 = await appeler(config, "president", "synthese",
                                    consigne + A.correction_attributions(attributions, positions), schema=schema)
         suivi2 = _suivi(res2, err2, "president", "synthese")

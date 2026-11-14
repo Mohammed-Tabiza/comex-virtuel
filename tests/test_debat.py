@@ -649,3 +649,30 @@ class AttributionsFormesTests(AttributionsTests):
         ecarts = self.ecarts("Finance (Option A : ROI élevé). Stratégie (Option A : gains). RH (Option C : prudence).")
         self.assertEqual(len(ecarts), 2)                                   # Stratégie sur A, RH sur C
         self.assertTrue(any("range RH sur l'option C" in x for x in ecarts))
+
+
+class AjustementsC009Tests(unittest.TestCase):
+    """Séance c009e434 : calculs sans montant de base dans la phrase, norme ISO, membre opposé à lui-même."""
+    DOSSIER = "Valeur annuelle : 8,6 M€. Prix : 864 k€ par an. Option C : 0,35 M€."
+
+    def lus(self, texte):
+        from app.chiffres import chiffres_hors_dossier
+        return [c.split(" — ")[0] for c in chiffres_hors_dossier(texte, self.DOSSIER)]
+
+    def test_part_ou_reduction_d_un_montant_du_dossier(self):
+        self.assertEqual(self.lus("Adoption à 70 % → valeur annuelle = 6 M€."), ["70 % (hypothèse de calcul)"])
+        self.assertEqual(self.lus("Une réduction de 20 % du prix (691 k€/an)."), ["20 % (hypothèse de calcul)"])
+
+    def test_un_roi_n_est_pas_une_part(self):
+        self.assertIn("1,6 M€", self.lus("Le ROI tombe à ~350 % (5,5 M€ / 1,6 M€)."))
+
+    def test_identifiants_de_norme_ignores(self):
+        self.assertEqual(self.lus("Certification ISO 27001 et article 28 du RGPD."), [])
+
+    def test_membre_oppose_a_lui_meme(self):
+        ecarts = G.attributions_inexactes(
+            {"desaccords": [{"sujet": "SaaS", "positions": "Risques (Option C : trop risqué) vs Risques (Option C : "
+                                                           "renégociable)"}]},
+            {"risques": {"option_finale": "C"}}, [{"id": "A"}, {"id": "C"}])
+        self.assertEqual(len(ecarts), 1)
+        self.assertIn("oppose Risques à lui-même", ecarts[0])

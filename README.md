@@ -65,7 +65,7 @@ Pour revenir à la simulation, définissez `$env:COMEX_MODE = "simulation"` puis
    Sont aussi des lacunes : un message tronqué par le serveur du modèle (tokens lus < 70 % des tokens estimés),
    une réponse qui ne cite pas les objections reçues (O4...), une synthèse qui omet une option ou un critère du
    cadrage, qui cite des sources hors dossier, ou dont un désaccord range un membre sur une autre option que sa
-   position finale (« Stratégie (A : …) » alors que la Stratégie a fini sur C). Dans ce dernier cas, la synthèse
+   position finale (« Stratégie (A : …) » alors que la Stratégie a fini sur C) ou l'oppose à lui-même. Dans ce cas, la synthèse
    est d'abord relancée une fois avec les erreurs nommées (environ une minute de plus), et la meilleure des deux
    est retenue ; l'interface signale la relance.
 
@@ -81,7 +81,8 @@ qui ne doit pas les présenter comme des faits. Une objection jugée résolue al
 tels chiffres reçoit une réserve automatique, transmise à la synthèse et au compte rendu, sans réécrire la réplique.
 Un calcul simple écrit dans la même phrase (part d'un montant, somme, écart, rapport, coût unitaire) est reconnu :
 « avec 40 % d'adoption, les 8,6 M€ tombent à 3,4 M€ » ne signale que « 40 % », comme hypothèse de calcul, qui ne
-déclenche pas de réserve. Un calcul faux (« 646 % » pour 8,6 / 1,03) ou fondé sur un montant inventé reste signalé.
+déclenche pas de réserve. Un montant du dossier peut servir de base sans être répété (« adoption à 70 % → 6 M€ »,
+« réduction de 20 % du prix (691 k€) ») ; les identifiants (ISO 27001, article 28) ne sont pas des chiffres. Un calcul faux (« 646 % » pour 8,6 / 1,03) ou fondé sur un montant inventé reste signalé.
 Une réserve n'est pas une lacune : un seuil assumé (« si l'adoption dépasse 70 % ») déclenche aussi le contrôle.
 
 **Contexte des modèles.** Ollama coupe sans erreur tout message plus long que le `num_ctx` du modèle

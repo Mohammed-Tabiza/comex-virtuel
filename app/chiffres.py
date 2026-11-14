@@ -20,6 +20,8 @@ CHIFFRE = re.compile(
 ECHELLE = {"md€": 1e9, "milliard": 1e9, "milliards": 1e9, "m€": 1e6, "million": 1e6, "millions": 1e6,
            "k€": 1e3}
 MAX_PAR_CONTRIBUTION = 10
+# « ISO 27001 », « article 28 » : des identifiants, pas des chiffres (constaté : séance c009e434)
+IDENTIFIANT = re.compile(r"(?:\bISO|\bIEC|\bnormes?|\barticles?|\bart\.|\bn°|\bloi)\s*[:/-]?\s*$", re.IGNORECASE)
 
 
 def _valeur(nombre: str) -> float:
@@ -46,6 +48,8 @@ def _lus(texte: str, avec_precision: bool = False):
         nature = _nature(unite)
         if nature == "n" and all(v < 10 or (1900 <= v <= 2100 and v.is_integer()) for v in valeurs):
             continue                                                 # petits entiers, années
+        if nature == "n" and IDENTIFIANT.search(texte[max(0, m.start() - 12):m.start()]):
+            continue
         if avec_precision:
             yield m.group(0).strip(), valeurs, nature, m.start(), [_demi_unite(n, ECHELLE.get(unite, 1)) for n in nombres]
         else:
@@ -55,6 +59,11 @@ def _lus(texte: str, avec_precision: bool = False):
 @lru_cache(maxsize=8)
 def valeurs_du_dossier(texte_dossier: str) -> frozenset:
     return frozenset((round(v, 6), nature) for _, valeurs, nature, _ in _lus(texte_dossier) for v in valeurs)
+
+
+@lru_cache(maxsize=8)
+def montants_du_dossier(texte_dossier: str) -> tuple:
+    return tuple(sorted(v for v, nature in valeurs_du_dossier(texte_dossier) if nature == "€"))
 
 
 def _connu(valeur: float, nature: str, connues: frozenset) -> bool:
@@ -76,7 +85,7 @@ def _textes(valeur) -> list[str]:
 HYPOTHESE = "hypothèse de calcul"
 
 
-def _resultats(operandes: list) -> list:
+def _resultats(operandes: list, montants_dossier: tuple = ()) -> list:
     """Résultats des opérations simples entre chiffres d'un même texte : (valeur, nature, chiffres utilisés).
 
     Constaté (séance be1d5427) : « avec 40 % d'adoption, la valeur tombe à 3,4 M€ » (40 % × 8,6 M€) était signalé
@@ -88,8 +97,10 @@ def _resultats(operandes: list) -> list:
             if i == j or b == 0:
                 continue
             avec = {ba, bb}
-            if na in ("€", "n") and nb == "%":
+            if na in ("€", "n") and nb == "%":                     # part ; réduction ou hausse d'une part < 100 %
                 resultats.append((a * b / 100, na, avec))
+                if 0 < b < 100:
+                    resultats += [(a * (1 - b / 100), na, avec), (a * (1 + b / 100), na, avec)]
             if na == nb == "%":
                 resultats.append((a * b / 100, "%", avec))
             if na == nb == "€":
@@ -98,6 +109,12 @@ def _resultats(operandes: list) -> list:
                 resultats += [(a / b, "€", avec), (a / b / 12, "€", avec)]
             if na == nb == "n":
                 resultats.append((a / b * 100, "%", avec))
+    # Constaté (c009e434) : « adoption à 70 % → 6 M€ » sans répéter les 8,6 M€ du dossier dans la phrase. Un montant
+    # du dossier peut servir de base à un pourcentage écrit dans la phrase, et à lui seul.
+    for p, np_, bp in operandes:
+        if np_ == "%" and 0 < p < 100:                  # une part, pas un ROI de 350 % (constaté : 1,6 M€ « expliqué »)
+            for a in montants_dossier:
+                resultats += [(a * p / 100, "€", {bp}), (a * (1 - p / 100), "€", {bp}), (a * (1 + p / 100), "€", {bp})]
     return resultats
 
 
@@ -119,14 +136,15 @@ def chiffres_hors_dossier(contribution, texte_dossier: str, maxi: int = MAX_PAR_
         # n'en est pas une, sinon « 3,4 M€ » justifierait « 40 % » (3,4 / 8,6) et réciproquement.
         operandes = [(v, nature, brut) for brut, valeurs, nature, _, _ in lus for v in valeurs
                      if nature == "%" or all(_connu(x, nature, connues) for x in valeurs)]
-        resultats = _resultats(operandes)
+        resultats = _resultats(operandes, montants_du_dossier(texte_dossier))
         hypotheses = set()
         inconnus = []
         for brut, valeurs, nature, debut, demis in lus:
             if all(_connu(v, nature, connues) for v in valeurs):
                 continue
-            utilises = [next((avec for r, nr, avec in resultats
-                              if nr == nature and brut not in avec and _proche(v, r, d)), None)
+            # Toutes les données des calculs qui tombent juste (un même chiffre peut s'expliquer de plusieurs façons)
+            utilises = [set().union(*[avec for r, nr, avec in resultats
+                                      if nr == nature and brut not in avec and _proche(v, r, d)])
                         for v, d in zip(valeurs, demis)]
             if all(utilises):
                 hypotheses.update(*utilises)                     # calcul reconnu : ses données sont des hypothèses
