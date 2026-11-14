@@ -126,7 +126,7 @@ SCHEMAS = {
         "recommandation": _TXT,
         "conditions": _LISTE,
         "options": {"type": "array", "items": _obj({
-            "nom": _TXT, "pour": _LISTE, "contre": _LISTE,
+            "id": _TXT, "nom": _TXT, "pour": _LISTE, "contre": _LISTE,
             "criteres": {"type": "array", "items": _obj({
                 "critere": _TXT,
                 "evaluation": {"type": "string", "enum": ["favorable", "mitige", "defavorable", "inconnu"]},
@@ -275,8 +275,11 @@ def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections:
         "Restitue les options avec leurs arguments pour et contre, les accords, les désaccords persistants "
         "(en nommant les positions), les hypothèses fragiles et les informations à obtenir. "
         "Formule une recommandation conditionnelle : ce qu'il faudrait décider, et à quelles conditions. "
-        "Pour chaque option du cadrage, évalue chaque critère validé (favorable, mitige, defavorable ou inconnu), "
-        "avec une justification concise et les références des sections qui l'étayent. "
+        "Restitue TOUTES les options du cadrage, chacune avec son identifiant (id : A, B, C...), même celles que "
+        "tu écartes. Pour chacune, évalue chaque critère validé en reprenant son libellé exact "
+        "(favorable, mitige, defavorable ou inconnu), "
+        "avec une justification concise et les références des sections du dossier qui l'étayent (forme D1-§2 ; "
+        "jamais un nom d'agent ni un numéro d'objection). "
         "Sépare les preuves documentées des objections et des incertitudes. Une preuve est un fait du dossier "
         "accompagné de ses sources, pas un avis d'agent. Une source existante ne garantit pas qu'elle prouve "
         "l'affirmation : vérifie le contenu. Sans preuve, utilise inconnu et une liste de sources vide. "

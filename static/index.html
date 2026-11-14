@@ -558,7 +558,8 @@ function contribution(e) {
     S.synthese = c;
     corps = `<p>${avecRefs(c.recommandation)}</p><p><a href="#" onclick="ouvrirOnglet('decision');return false" style="color:var(--brass)">Ouvrir le dossier de décision →</a></p>`;
   }
-  const invalides = e.meta.sources_invalides.length ? `<div class="note" style="margin:8px 0 0;border-color:var(--err)">Références introuvables dans le dossier : ${e.meta.sources_invalides.map(chipRef).join(" ")}</div>` : "";
+  const invalides = (e.meta.sources_invalides.length ? `<div class="note" style="margin:8px 0 0;border-color:var(--err)">Références introuvables dans le dossier : ${e.meta.sources_invalides.map(chipRef).join(" ")}</div>` : "") +
+    (e.meta.tronque ? `<div class="note" style="margin:8px 0 0;border-color:var(--err)">Message tronqué par le serveur du modèle : ${e.meta.tokens_entree} tokens lus sur ~${e.meta.tokens_estimes}. Cette contribution repose sur un contexte incomplet.</div>` : "");
   const carte = document.createElement("div");
   carte.className = "carte"; carte.style.setProperty("--c", couleur(id));
   carte.innerHTML = `<div class="c-tete"><b>${esc(S.config.agents[id].titre)}</b><span class="c-etape">${ETAPES[e.etape]}</span>

@@ -21,23 +21,27 @@ DOSSIER = Path(__file__).resolve().parents[1] / "seances/assistant-ia-2027"
 class ModelesTest(Modeles):
     """Simulation instantanée, avec pannes et réponses de remplacement injectables."""
 
-    def __init__(self, pannes=(), remplacements=None):
+    def __init__(self, pannes=(), remplacements=None, tronques=()):
         config = charger_config()
         config["mode"] = "simulation"
         config["protocole"]["simulation_duree"] = [0, 0]
         super().__init__(config)
         self.pannes = set(pannes)                  # {(agent, etape)}
         self.remplacements = remplacements or {}   # {(agent, etape): [réponse 1, réponse 2...]}
+        self.tronques = set(tronques)              # {(agent, etape)} : le « serveur » coupe le message
         self.appels: list[tuple[str, str, str]] = []
 
     async def generer(self, agent_id, etape, messages, on_flux):
         self.appels.append((agent_id, etape, messages[-1]["content"]))
         if (agent_id, etape) in self.pannes:
             raise RuntimeError("panne simulée")
+        meta = {"modele": "test", "libelle": "Test", "duree": 0}
+        if (agent_id, etape) in self.tronques:
+            meta |= {"simulation": False, "tokens_estimes": 15462, "tokens_entree": 2050}
         file = self.remplacements.get((agent_id, etape))
         if file:
-            return file.pop(0), {"modele": "test", "libelle": "Test", "duree": 0}
-        return simulation.reponse(agent_id, etape), {"modele": "test", "libelle": "Test", "duree": 0}
+            return file.pop(0), meta
+        return simulation.reponse(agent_id, etape), meta
 
 
 def derouler(modeles: ModelesTest, seance_id: str) -> dict:
@@ -120,6 +124,56 @@ class DebatTests(unittest.TestCase):
         rapport = compte_rendu(SEANCES["deb00006"], etat)
         self.assertIn("Réplique du contradicteur — **non résolue**", rapport)
         self.assertIn("## Échanges entre membres", rapport)
+
+
+class GardeFousTests(unittest.TestCase):
+    """Cas observés lors de la séance réelle 7a178548 (Nemotron limité à 4 096 tokens par Ollama)."""
+
+    def test_un_message_tronque_rend_la_seance_incomplete(self):
+        modeles = ModelesTest(tronques={("president", "synthese"), ("risques", "reponse")})
+        etat = derouler(modeles, "gf000001")
+        lacunes = " ".join(etat["lacunes"])
+        self.assertIn("Message tronqué : Président (synthèse pour le décideur) n'a lu que 2050 tokens sur ~15462", lacunes)
+        self.assertIn("Message tronqué : Risques (réponse aux objections)", lacunes)
+        self.assertEqual(statut_final(etat), "incomplete")
+
+    def test_une_reponse_qui_ignore_ses_objections_est_une_lacune(self):
+        hors_sujet = {"reponses": [{"objection_id": "objection_1", "attitude": "maintient", "texte": "..."}],
+                      "reactions_pairs": [], "position_revisee": "favorable_sous_conditions",
+                      "option_revisee": "C", "resume": "..."}
+        modeles = ModelesTest(remplacements={("operations", "reponse"): [hors_sujet]})
+        etat = derouler(modeles, "gf000002")
+        self.assertIn("Opérations n'a pas répondu à O3 (identifiants cités à la place : objection_1).", etat["lacunes"])
+        self.assertEqual(statut_final(etat), "incomplete")
+
+    def test_une_synthese_qui_omet_des_options_ou_cite_hors_dossier_est_signalee(self):
+        incomplete = simulation.reponse("president", "synthese")
+        option_c = incomplete["options"][2]
+        option_c["criteres"] = option_c["criteres"][:2]
+        option_c["preuves"][0]["sources"] = ["Réplique du contradicteur O2"]
+        incomplete["options"] = [option_c]
+        etat = derouler(ModelesTest(remplacements={("president", "synthese"): [incomplete]}), "gf000003")
+        lacunes = " ".join(etat["lacunes"])
+        self.assertIn("La synthèse n'évalue pas l'option A", lacunes)
+        self.assertIn("La synthèse n'évalue pas l'option B", lacunes)
+        self.assertIn("La synthèse n'évalue pas l'option C sur : Capacité d'exécution en 2027", lacunes)
+        self.assertIn("1 source(s) qui ne sont pas des sections du dossier : Réplique du contradicteur O2", lacunes)
+
+    def test_la_synthese_de_simulation_passe_les_controles(self):
+        from app.graph import ecarts_synthese
+        refs = charger_dossier(DOSSIER).refs
+        self.assertEqual(ecarts_synthese(simulation.SYNTHESE, simulation.CADRAGE, refs), [])
+
+    def test_un_appel_qui_depasse_contexte_max_est_refuse_avant_envoi(self):
+        from app.llm import ErreurModele
+        config = charger_config()
+        config["mode"] = "reel"
+        for m in config["modeles"].values():
+            m["contexte_max"] = 4096
+        modeles = Modeles(config)
+        messages = [{"role": "system", "content": "x" * 20000}, {"role": "user", "content": "y"}]
+        with self.assertRaisesRegex(ErreurModele, "contexte_max 4096"):
+            asyncio.run(modeles.generer("president", "synthese", messages, None))
 
 
 if __name__ == "__main__":

@@ -62,6 +62,20 @@ Pour revenir à la simulation, définissez `$env:COMEX_MODE = "simulation"` puis
 7. **Synthèse** : le président restitue options, accords, désaccords persistants et une recommandation conditionnelle.
    Si une contribution manque (modèle en panne, expert muet), la séance est marquée **incomplète** : les lacunes
    sont nommées dans la synthèse, l'interface et le compte rendu, et la séance n'est pas enregistrée comme rejeu.
+   Sont aussi des lacunes : un message tronqué par le serveur du modèle (tokens lus < 70 % des tokens estimés),
+   une réponse qui ne cite pas les objections reçues (O4...), une synthèse qui omet une option ou un critère du
+   cadrage, ou qui cite des sources hors dossier.
+
+**Contexte des modèles.** Ollama coupe sans erreur tout message plus long que le `num_ctx` du modèle
+(4 096 tokens par défaut). Donnez à chaque modèle un contexte suffisant (une synthèse fait ~15 000 tokens) :
+
+```powershell
+"FROM nemotron-3-nano:4b`nPARAMETER num_ctx 32768" | Out-File -Encoding utf8 Modelfile.nemotron
+ollama create nemotron-3-nano:4b-32k -f Modelfile.nemotron
+```
+
+puis indiquez dans `config.yaml` le nom du nouveau modèle et son vrai contexte (`contexte_max`) : un appel dont
+l'entrée estimée plus la sortie maximale dépasse `contexte_max` est refusé avant envoi.
 8. **Arbitrage** : vous saisissez votre décision ; le compte rendu Markdown est téléchargeable.
 
 Chaque contribution est attribuée, horodatée, liée au modèle qui l'a produite, et jamais réécrite.

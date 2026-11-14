@@ -13,6 +13,7 @@ from typing import Awaitable, Callable
 from openai import AsyncOpenAI
 
 from .agents import SCHEMAS
+from .dossier import estimer_tokens
 from . import simulation
 
 OnFlux = Callable[[str, str], Awaitable[None]]
@@ -53,15 +54,29 @@ class Modeles:
         reglage = self.config["agents"][agent_id]
         return reglage["modele"], self.config["modeles"][reglage["modele"]], reglage.get("thinking", False)
 
+    def max_tokens_de(self, modele: dict, etape: str) -> int:
+        max_tokens = modele.get("max_tokens", 4096)
+        if etape == "synthese":
+            max_tokens = self.config["protocole"].get("synthese_max_tokens", max_tokens)
+        return max_tokens
+
     async def generer(self, agent_id: str, etape: str, messages: list[dict], on_flux: OnFlux) -> tuple[dict, dict]:
         nom, modele, thinking = self.modele_de(agent_id)
+        estimes = estimer_tokens("".join(m["content"] for m in messages))
+        if not self.simulation:
+            # Un appel qui ne tient pas dans la fenêtre du modèle serait tronqué sans erreur par le serveur
+            contexte, sortie = modele.get("contexte_max"), self.max_tokens_de(modele, etape)
+            if contexte and estimes + sortie > contexte:
+                raise ErreurModele(f"message trop long pour {nom} : ~{estimes} tokens en entrée + {sortie} en sortie "
+                                   f"> contexte_max {contexte}")
         debut = time.time()
         async with self.verrous[nom]:
             if self.simulation:
                 resultat, usage = await self._simuler(agent_id, etape, on_flux)
             else:
                 resultat, usage = await self._appeler(nom, modele, thinking, etape, messages, on_flux)
-        meta = {"modele": nom, "libelle": modele["libelle"], "duree": round(time.time() - debut, 1), **usage}
+        meta = {"modele": nom, "libelle": modele["libelle"], "duree": round(time.time() - debut, 1),
+                "tokens_estimes": estimes, "simulation": self.simulation, **usage}
         return resultat, meta
 
     # ------------------------------------------------------------------ appel réel
@@ -86,9 +101,7 @@ class Modeles:
                 mode = "consigne"
 
     async def _flux(self, client, modele, thinking, etape, messages, mode, on_flux):
-        max_tokens = modele.get("max_tokens", 4096)
-        if etape == "synthese":
-            max_tokens = self.config["protocole"].get("synthese_max_tokens", max_tokens)
+        max_tokens = self.max_tokens_de(modele, etape)
         params = dict(model=modele["model"], messages=messages, stream=True,
                       temperature=modele.get("temperature", 0.6), max_tokens=max_tokens,
                       stream_options={"include_usage": True})

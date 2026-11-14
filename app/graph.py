@@ -24,11 +24,14 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
 from . import agents as A
-from .dossier import refs_citees
+from .dossier import REF, refs_citees
 from .llm import Modeles
 from .runtime import seance_de
 
 MODELES: Modeles | None = None      # initialisé par le serveur au démarrage
+# En dessous de cette part des tokens estimés, le serveur a tronqué le message sans le dire
+# (ex. Ollama et son contexte par défaut de 4 096 tokens). Mesuré : 1,0 à 1,1 sain, 0,13 à 0,35 tronqué.
+SEUIL_TRONCATURE = 0.7
 
 LIBELLES = {
     "cadrage": "Cadrage de la question",
@@ -64,6 +67,7 @@ class Etat(TypedDict, total=False):
     replique: dict
     synthese: dict
     lacunes: list
+    tronques: Annotated[list, operator.add]
     erreurs: Annotated[list, operator.add]
 
 
@@ -126,6 +130,9 @@ async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: s
     citees = refs_citees(resultat)
     meta["sources"] = sorted(citees & seance.dossier.refs)
     meta["sources_invalides"] = sorted(citees - seance.dossier.refs)
+    lus, estimes = meta.get("tokens_entree"), meta.get("tokens_estimes")
+    if not meta.get("simulation") and lus and estimes and lus < SEUIL_TRONCATURE * estimes:
+        meta["tronque"] = True
     await seance.publier("contribution", agent=agent_id, etape=etape, contenu=resultat, meta=meta)
     await seance.publier("agent_statut", agent=agent_id, statut="termine", etape=etape,
                          libelle=LIBELLES[etape], duree=meta["duree"])
@@ -136,11 +143,22 @@ def _erreur(message: str | None) -> dict:
     return {"erreurs": [message]} if message else {}
 
 
+def _suivi(res: dict | None, err: str | None, agent_id: str, etape: str) -> dict:
+    """Erreur éventuelle et troncature détectée d'un appel, à fusionner dans l'état."""
+    suivi = _erreur(err)
+    meta = (res or {}).get("_meta", {})
+    if meta.get("tronque"):
+        suivi["tronques"] = [{"agent": agent_id, "etape": etape, "lus": meta["tokens_entree"],
+                              "estimes": meta["tokens_estimes"]}]
+    return suivi
+
+
 # --------------------------------------------------------------------------- nœuds
 async def cadrage(state: Etat, config: RunnableConfig):
     await seance_de(config).publier("phase", phase="cadrage")
     res, err = await appeler(config, "president", "cadrage", A.prompt_cadrage(state.get("complement", "")))
-    return {"cadrage": res, **_erreur(err)} if res else _erreur(err)
+    suivi = _suivi(res, err, "president", "cadrage")
+    return {"cadrage": res, **suivi} if res else suivi
 
 
 async def validation(state: Etat):
@@ -153,12 +171,14 @@ async def expert(tache: Tache, config: RunnableConfig):
     agent_id = tache["agent_id"]
     res, err = await appeler(config, agent_id, "avis",
                              A.prompt_avis(agent_id, tache["cadrage"], tache.get("complement", "")))
-    return {"avis": {f"{agent_id}:initial": res}, **_erreur(err)} if res else _erreur(err)
+    suivi = _suivi(res, err, agent_id, "avis")
+    return {"avis": {f"{agent_id}:initial": res}, **suivi} if res else suivi
 
 
 async def contre_analyse(tache: Tache, config: RunnableConfig):
     res, err = await appeler(config, "contradicteur", "contre_analyse", A.prompt_contre_analyse(tache["cadrage"]))
-    return {"contre_analyse": res, **_erreur(err)} if res else _erreur(err)
+    suivi = _suivi(res, err, "contradicteur", "contre_analyse")
+    return {"contre_analyse": res, **suivi} if res else suivi
 
 
 def _avis_par_expert(state: Etat) -> dict:
@@ -194,8 +214,9 @@ async def challenge(state: Etat, config: RunnableConfig):
     cadrage_, contre = sans_meta(state["cadrage"]), sans_meta(state.get("contre_analyse"))
     erreurs: list = []
     res, err = await appeler(config, "contradicteur", "objections", A.prompt_objections(cadrage_, contre, avis))
-    if err:
-        erreurs.append(err)
+    suivi = _suivi(res, err, "contradicteur", "objections")
+    erreurs += suivi.get("erreurs", [])
+    tronques = suivi.get("tronques", [])
     objections, incidents = _recevables((res or {}).get("objections", []), avis, [])
     erreurs += incidents
 
@@ -205,12 +226,13 @@ async def challenge(state: Etat, config: RunnableConfig):
         res2, err2 = await appeler(config, "contradicteur", "objections",
                                    A.prompt_objections_complement(cadrage_, contre, manquants, objections,
                                                                   len(objections) + 1))
-        if err2:
-            erreurs.append(err2)
+        suivi = _suivi(res2, err2, "contradicteur", "objections")
+        erreurs += suivi.get("erreurs", [])
+        tronques += suivi.get("tronques", [])
         complement, incidents = _recevables((res2 or {}).get("objections", []), manquants, objections)
         objections += complement
         erreurs += incidents
-    return {"objections": objections, "erreurs": erreurs}
+    return {"objections": objections, "erreurs": erreurs, "tronques": tronques}
 
 
 async def reponse_expert(tache: Tache, config: RunnableConfig):
@@ -218,7 +240,8 @@ async def reponse_expert(tache: Tache, config: RunnableConfig):
     res, err = await appeler(config, agent_id, "reponse",
                              A.prompt_reponse(agent_id, tache["avis_propre"], tache["objections"],
                                               tache.get("autres_avis", {})))
-    return {"reponses": {f"{agent_id}:reponse": res}, **_erreur(err)} if res else _erreur(err)
+    suivi = _suivi(res, err, agent_id, "reponse")
+    return {"reponses": {f"{agent_id}:reponse": res}, **suivi} if res else suivi
 
 
 async def replique(state: Etat, config: RunnableConfig):
@@ -226,7 +249,8 @@ async def replique(state: Etat, config: RunnableConfig):
     reponses = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("reponses", {}).items()}
     res, err = await appeler(config, "contradicteur", "replique",
                              A.prompt_replique(state.get("objections", []), reponses))
-    return {"replique": res, **_erreur(err)} if res else _erreur(err)
+    suivi = _suivi(res, err, "contradicteur", "replique")
+    return {"replique": res, **suivi} if res else suivi
 
 
 def lacunes_du_debat(state: Etat) -> list[str]:
@@ -249,9 +273,59 @@ def lacunes_du_debat(state: Etat) -> list[str]:
         repondants = {cle.split(":")[0] for cle in state.get("reponses", {})}
         for e in sorted(cibles - repondants):
             lacunes.append(f"{A.AGENTS[e]['nom']} n'a pas répondu aux objections qui lui étaient adressées.")
+        # Une réponse doit traiter les objections reçues, désignées par leur identifiant (O4...)
+        for cle, contribution in state.get("reponses", {}).items():
+            e = cle.split(":")[0]
+            attendus = [o["id"] for o in objections if o["cible"] == e]
+            bruts = [str(r.get("objection_id") or "") for r in (contribution or {}).get("reponses", [])]
+            cites = {_norm_id(c) for c in bruts}
+            oublies = [i for i in attendus if _norm_id(i) not in cites]
+            if oublies:
+                autres = sorted({c for c in bruts if c and _norm_id(c) not in {_norm_id(i) for i in attendus}})
+                lacunes.append(f"{A.AGENTS[e]['nom']} n'a pas répondu à {', '.join(oublies)}"
+                               + (f" (identifiants cités à la place : {', '.join(autres)})." if autres else "."))
         if not state.get("replique"):
             lacunes.append("La réplique du contradicteur est absente : le statut des objections n'est pas évalué.")
+    lacunes += [_lacune_troncature(t) for t in state.get("tronques", [])]
     return lacunes
+
+
+def _norm_id(valeur) -> str:
+    return str(valeur or "").strip().upper()
+
+
+def _norm(texte) -> str:
+    return " ".join(str(texte or "").lower().split())
+
+
+def _lacune_troncature(t: dict) -> str:
+    return (f"Message tronqué : {A.AGENTS[t['agent']]['nom']} ({LIBELLES[t['etape']].lower()}) n'a lu que "
+            f"{t['lus']} tokens sur ~{t['estimes']}. Sa contribution repose sur un contexte incomplet : "
+            "augmentez le contexte du modèle (num_ctx d'Ollama).")
+
+
+def ecarts_synthese(synthese: dict, cadrage: dict, refs: set[str]) -> list[str]:
+    """Ce que la synthèse omet ou invente par rapport au cadrage validé et au dossier."""
+    ecarts = []
+    par_id = {_norm_id(o.get("id")): o for o in synthese.get("options", [])}
+    criteres = cadrage.get("criteres", [])
+    for option in cadrage.get("options", []):
+        evaluee = par_id.get(_norm_id(option["id"]))
+        if not evaluee:
+            ecarts.append(f"La synthèse n'évalue pas l'option {option['id']} ({option['nom']}).")
+            continue
+        couverts = {_norm(c.get("critere")) for c in evaluee.get("criteres", [])}
+        oublies = [c for c in criteres if _norm(c) not in couverts]
+        if oublies:
+            ecarts.append(f"La synthèse n'évalue pas l'option {option['id']} sur : {' ; '.join(oublies)}.")
+    sources = [s for o in synthese.get("options", [])
+               for bloc in (o.get("criteres", []), o.get("preuves", [])) for x in bloc for s in x.get("sources", [])]
+    hors_dossier = sorted({str(s) for s in sources
+                           if not ((m := REF.fullmatch(str(s).strip())) and m.group(1) in refs)})
+    if hors_dossier:
+        ecarts.append(f"La synthèse cite {len(hors_dossier)} source(s) qui ne sont pas des sections du dossier : "
+                      f"{' ; '.join(hors_dossier[:5])}.")
+    return ecarts
 
 
 async def synthese(state: Etat, config: RunnableConfig):
@@ -263,7 +337,13 @@ async def synthese(state: Etat, config: RunnableConfig):
                              A.prompt_synthese(sans_meta(state["cadrage"]), avis, sans_meta(state.get("contre_analyse")),
                                                state.get("objections", []), reponses,
                                                sans_meta(state.get("replique")), lacunes))
-    return {"synthese": res, "lacunes": lacunes, **_erreur(err)} if res else {"lacunes": lacunes, **_erreur(err)}
+    suivi = _suivi(res, err, "president", "synthese")
+    if not res:
+        return {"lacunes": lacunes, **suivi}
+    # Contrôles a posteriori : la synthèse elle-même peut être tronquée ou incomplète
+    lacunes = lacunes + [_lacune_troncature(t) for t in suivi.get("tronques", [])] + \
+        ecarts_synthese(sans_meta(res), sans_meta(state["cadrage"]), seance_de(config).dossier.refs)
+    return {"synthese": res, "lacunes": lacunes, **suivi}
 
 
 # --------------------------------------------------------------------------- routage

@@ -268,8 +268,9 @@ _COMPARAISON = [
         "incertitudes": ["Résultats du test de charge et du groupe témoin.", "Capacité du pilote à réduire les inconnues avant le prochain arbitrage."],
     },
 ]
-for _option, _details in zip(SYNTHESE["options"], _COMPARAISON):
+for _option, _details, _cadre in zip(SYNTHESE["options"], _COMPARAISON, CADRAGE["options"]):
     _option.update(_details)
+    _option.setdefault("id", _cadre["id"])
 
 REFLEXIONS = {
     "cadrage": "Je relis la question posée et la décision attendue. Trois options sont décrites dans le dossier. Les contraintes non négociables portent sur la localisation des données, l'enveloppe et le CSE. Plusieurs inconnues sont listées par le dossier lui-même…",
