@@ -1,6 +1,7 @@
 """Membres du COMEX, schémas de contribution et construction des prompts."""
 import copy
 import json
+import re
 import unicodedata
 
 AGENTS = {
@@ -109,7 +110,7 @@ SCHEMAS = {
         })},
         "reactions_pairs": {"type": "array", "items": _obj({
             "membre": {"type": "string", "enum": EXPERTS},
-            "accord": {"type": "string", "enum": ["accord", "desaccord"]},
+            "accord": {"type": "string", "enum": ["accord", "partiel", "desaccord"]},
             "texte": _TXT,
         })},
         "position_revisee": _POSITION,
@@ -261,14 +262,48 @@ def condenser_avis(avis: dict) -> dict:
     return {e: _sans_gras({k: a[k] for k in CHAMPS_AVIS_SYNTHESE if k in a}) for e, a in avis.items()}
 
 
+# Constaté (séance 2bf62dae) : des réactions étiquetées « accord » dont le texte dit « Mon désaccord porte sur… »,
+# et deux réactions au même membre. Ces marques de désaccord font passer une réaction « accord » en « partiel ».
+MARQUES_DESACCORD = re.compile(
+    r"d[ée]saccord|d[ée]sapprouv|contest|nuanc|ne (?:partage|suis) pas|pas (?:en )?d?.?accord|"
+    r"ne r[ée]sou[dt] pas|je (?:m'|me )?(?:oppose|r[ée]fute)", re.IGNORECASE)
+
+
+def reconcilier_reactions(reactions: list, agent_id: str) -> tuple[list, list]:
+    """Rend les réactions entre pairs cohérentes : pas de réaction à soi-même, une seule réaction par membre
+    (textes fusionnés), étiquette « accord » corrigée en « partiel » quand le texte exprime un désaccord.
+    Renvoie les réactions et la liste des corrections, pour la traçabilité."""
+    corrections, par_membre = [], {}
+    for x in reactions or []:
+        membre = x.get("membre")
+        if membre == agent_id:
+            corrections.append("réaction à soi-même retirée")
+            continue
+        if membre in par_membre:
+            premiere = par_membre[membre]
+            premiere["texte"] = f"{premiere.get('texte', '')} {x.get('texte', '')}".strip()
+            if premiere.get("accord") != x.get("accord"):
+                premiere["accord"] = "partiel"
+            corrections.append(f"réactions à {membre} fusionnées")
+            continue
+        par_membre[membre] = dict(x)
+    for membre, x in par_membre.items():
+        if x.get("accord") == "accord" and MARQUES_DESACCORD.search(_sans_gras(x.get("texte", ""))):
+            x["accord"] = "partiel"
+            corrections.append(f"réaction à {membre} : accord → partiel")
+    return list(par_membre.values()), corrections
+
+
 def condenser_reponses(reponses: dict) -> dict:
-    """Réponses complètes ; réactions entre pairs : désaccords en entier, accords réduits à leur première phrase."""
+    """Réponses complètes ; réactions entre pairs : désaccords et accords partiels en entier, accords réduits à
+    leur première phrase."""
     condensees = {}
     for e, r in reponses.items():
         r = _sans_gras(dict(r))
+        reactions, _ = reconcilier_reactions(r.get("reactions_pairs", []), e)
         r["reactions_pairs"] = [
-            x if x.get("accord") == "desaccord" else {**x, "texte": _premiere_phrase(x.get("texte", ""))}
-            for x in r.get("reactions_pairs", []) if x.get("membre") != e]          # pas de réaction à soi-même
+            x if x.get("accord") in ("desaccord", "partiel") else {**x, "texte": _premiere_phrase(x.get("texte", ""))}
+            for x in reactions]
         condensees[e] = r
     return condensees
 
@@ -346,27 +381,51 @@ def prompt_reponse(agent_id: str, avis_propre: dict, objections: list, autres_av
         "## Tâche : réponse aux objections et aux autres membres\n"
         "Pour chaque objection, indique si tu maintiens ta position, l'ajustes ou concèdes, avec une justification "
         "sourcée. Concéder un point fondé est une qualité, pas une faiblesse. "
-        "Réagis ensuite aux avis des autres membres qui touchent ton mandat (reactions_pairs) : dis avec qui tu es "
-        "en accord ou en désaccord et pourquoi, au moins un désaccord s'il en existe un réel ; pas de politesse. "
+        "Réagis ensuite aux avis des autres membres qui touchent ton mandat (reactions_pairs), une seule réaction "
+        "par membre et jamais à toi-même : dis avec qui tu es en accord ou en désaccord et pourquoi, au moins un "
+        "désaccord s'il en existe un réel ; pas de politesse. Champ accord : \"accord\" si tu partages l'essentiel "
+        "sans réserve, \"partiel\" si tu es d'accord sur un point et en désaccord sur un autre, \"desaccord\" si "
+        "tu contestes l'essentiel. "
         "Donne enfin ta position révisée et l'identifiant de l'option que tu préfères désormais "
         "(option_revisee), qui peut rester la même.\n"
     ) + _schema("reponse")
 
 
-def prompt_replique(objections: list, reponses: dict) -> str:
+CHIFFRES_TITRE = "Chiffres absents du dossier, par auteur (calculs ou inventions, à vérifier)"
+CHIFFRES_OBJECTION_TITRE = "Chiffres absents du dossier dans la réponse à chaque objection (à vérifier)"
+
+
+def prompt_replique(objections: list, reponses: dict, chiffres: dict | None = None) -> str:
     return _role("contradicteur") + _bloc("Tes objections", objections) + \
-        _bloc("Réponses des membres", reponses) + (
+        _bloc("Réponses des membres", reponses) + \
+        (_bloc(CHIFFRES_OBJECTION_TITRE, chiffres, compact=True) if chiffres else "") + (
         "## Tâche : réplique\n"
         "Pour chaque objection, juge si la réponse du membre la lève : resolue (réponse sourcée et convaincante), "
         "partiellement_resolue (ajustement insuffisant ou condition non vérifiable) ou non_resolue (position "
         "maintenue sans élément nouveau, ou absence de réponse). Justifie en une ou deux phrases. "
         "Ne cède pas par courtoisie : une concession formelle sans engagement vérifiable reste partielle.\n"
+        "Les chiffres absents du dossier sont listés à part, par objection : un seuil ou une hypothèse présentés "
+        "comme tels "
+        "sont acceptables, mais une réponse qui s'appuie sur un chiffre présenté comme un fait ou un calcul, "
+        "sans qu'il soit vérifiable à partir des chiffres du dossier, ne peut pas être resolue : vérifie le "
+        "calcul et signale l'erreur ou l'absence de source dans ton commentaire.\n"
     ) + _schema("replique")
+
+
+def correction_attributions(attributions: list, positions: dict) -> str:
+    """Complément de consigne pour relancer une synthèse dont des désaccords inversent les positions."""
+    finales = {AGENTS[e]["nom"]: p.get("option_finale") for e, p in positions.items() if e in AGENTS}
+    return _bloc("Correction demandée", "Ta synthèse précédente contenait ces erreurs d'attribution :\n" +
+                 "\n".join(f"- {x}" for x in attributions) +
+                 "\nOptions finales de chaque membre (elles font foi, ne les confonds pas avec les avis initiaux) : " +
+                 ", ".join(f"{n} → {o}" for n, o in finales.items()) +
+                 ".\nRefais la synthèse complète en rangeant chaque membre, dans chaque désaccord, sur son option finale.")
 
 
 def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections: list, reponses: dict,
                     replique: dict | None = None, lacunes: list | None = None,
-                    positions: dict | None = None) -> str:
+                    positions: dict | None = None, chiffres: dict | None = None,
+                    reserves: list | None = None) -> str:
     cadrage_utile = {k: cadrage[k] for k in CHAMPS_CADRAGE_SYNTHESE if k in cadrage}
     texte = _role("president") + _bloc("Cadrage", cadrage_utile, compact=True) + \
         _bloc("Avis initiaux (condensés : position, option, résumé, arguments sourcés, conditions de changement)",
@@ -382,6 +441,11 @@ def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections:
     if positions:
         texte += _bloc("Positions des membres, initiales et finales (calculées à partir des contributions, "
                        "elles font foi)", positions, compact=True)
+    if chiffres:
+        texte += _bloc(CHIFFRES_TITRE, chiffres, compact=True)
+    if reserves:
+        texte += _bloc("Réserves du contrôle automatique sur la réplique (ces objections ne sont pas résolues "
+                       "tant que les chiffres ne sont pas vérifiés)", reserves)
     return texte + (
         "## Tâche : synthèse pour le décideur\n"
         "Restitue les options avec leurs arguments pour et contre, les accords, les désaccords persistants "
@@ -398,9 +462,15 @@ def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections:
         "l'affirmation : vérifie le contenu. Sans preuve, utilise inconnu et une liste de sources vide. "
         "Relie les objections aux échanges (O1, O2...) et indique celles qui restent non résolues, en partant de la "
         "réplique du contradicteur ; si tu t'en écartes, dis pourquoi. Restitue les désaccords entre membres "
-        "exprimés dans leurs réactions. Si des contributions manquent, signale-le dans les incertitudes et ne "
+        "exprimés dans leurs réactions. Dans chaque désaccord, écris chaque camp sous la forme « Membre, Membre "
+        "(option X : leur raison en une phrase) », avec l'option finale de chaque membre telle que la donne le tableau des positions, "
+        "et désigne les membres par leur nom : " + ", ".join(AGENTS[e]["nom"] for e in EXPERTS) + ". "
+        "Si des contributions manquent, signale-le dans les incertitudes et ne "
         "présente jamais comme un accord un sujet sur lequel un membre absent ne s'est pas exprimé. "
         "N'invente ni score numérique ni pondération ; conserve les désaccords et les informations manquantes. "
         "Ne présente jamais un nombre d'avis favorables comme une preuve. "
+        "Ne reprends jamais comme un fait un chiffre de la liste des chiffres absents du dossier : s'il est utile, "
+        "présente-le comme une estimation non sourcée en nommant le membre qui l'avance, et range-le dans les "
+        "hypothèses fragiles ou les informations à obtenir. "
         "Les noms de champs sont imposés par le schéma, en français (recommandation...) : ne les traduis pas.\n"
     ) + _schema("synthese", schema_synthese(cadrage))

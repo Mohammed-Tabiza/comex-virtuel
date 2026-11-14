@@ -481,6 +481,8 @@ function traiter(e) {
     case "validation_humaine": $("#voile").classList.remove("on");
       note(e.action === "valider" ? "Cadrage validé par le décideur. Les analyses indépendantes démarrent." : "Nouveau cadrage demandé par le décideur.", e.complement); break;
     case "seance_terminee": fin(e); break;
+    case "reserves": reserves(e.reserves); break;
+    case "relance": note(e.message, (e.details || []).join(" ")); break;
     case "decision_enregistree": note("Décision humaine enregistrée dans le compte rendu.", e.texte); break;
     case "erreur": toast(e.message); $("#btnLancer").disabled = false; $("#choixDossier").disabled = false; clearInterval(S.timer); break;
   }
@@ -550,7 +552,7 @@ function contribution(e) {
     if (!S.positionsVues) { S.positionsVues = true; ouvrirOnglet("positions"); }
     if (S.avis[id]) el.querySelector(".s-bas").innerHTML = `<span class="pos ${S.avis[id].position}" style="opacity:.55">${POS[S.avis[id].position]}</span>→<span class="pos ${c.position_revisee}">${POS[c.position_revisee]}</span>`;
     corps = c.reponses.map(r => `<div class="obj"><span class="id">${esc(r.objection_id)}</span><div><span class="att ${r.attitude}">${esc(r.attitude)}</span> ${avecRefs(r.texte)}</div></div>`).join("") +
-      liste("Réactions aux autres membres", c.reactions_pairs, x => `<b>${x.accord === "accord" ? "Accord" : "Désaccord"} avec ${esc(nomAgent(x.membre))}</b> : ${avecRefs(x.texte)}`) +
+      liste("Réactions aux autres membres", c.reactions_pairs, x => `<b>${({accord: "Accord", partiel: "Accord partiel", desaccord: "Désaccord"})[x.accord] || esc(x.accord)} avec ${esc(nomAgent(x.membre))}</b> : ${avecRefs(x.texte)}`) +
       `<p style="color:var(--muted)">Position révisée : <span class="pos ${c.position_revisee}">${POS[c.position_revisee]}</span></p>`;
   } else if (e.etape === "replique") {
     corps = `<p>${avecRefs(c.resume)}</p>` + c.evaluations.map(v => `<div class="obj"><span class="id">${esc(v.objection_id)}</span><div><b>${esc(STATUTS_OBJ[v.statut] || v.statut)}</b> ${avecRefs(v.commentaire)}</div></div>`).join("");
@@ -558,7 +560,8 @@ function contribution(e) {
     S.synthese = c;
     corps = `<p>${avecRefs(c.recommandation)}</p><p><a href="#" onclick="ouvrirOnglet('decision');return false" style="color:var(--brass)">Ouvrir le dossier de décision →</a></p>`;
   }
-  const invalides = (e.meta.sources_invalides.length ? `<div class="note" style="margin:8px 0 0;border-color:var(--err)">Références introuvables dans le dossier : ${e.meta.sources_invalides.map(chipRef).join(" ")}</div>` : "") +
+  const chiffres = (e.meta.chiffres_hors_dossier || []).length ? `<div class="note" style="margin:8px 0 0;border-color:var(--warn)">Chiffres absents du dossier, à vérifier :<ul style="margin:4px 0 0 18px">${e.meta.chiffres_hors_dossier.map(c => `<li>${esc(c)}</li>`).join("")}</ul></div>` : "";
+  const invalides = chiffres + (e.meta.sources_invalides.length ? `<div class="note" style="margin:8px 0 0;border-color:var(--err)">Références introuvables dans le dossier : ${e.meta.sources_invalides.map(chipRef).join(" ")}</div>` : "") +
     (e.meta.tronque ? `<div class="note" style="margin:8px 0 0;border-color:var(--err)">Message tronqué par le serveur du modèle : ${e.meta.tokens_entree} tokens lus sur ~${e.meta.tokens_estimes}. Cette contribution repose sur un contexte incomplet.</div>` : "");
   const carte = document.createElement("div");
   carte.className = "carte"; carte.style.setProperty("--c", couleur(id));
@@ -571,6 +574,13 @@ function ajouterFil(noeud) {
   const v = $("#vue-debat");
   v.querySelector(".vide")?.remove();
   v.prepend(noeud);
+}
+
+function reserves(liste) {
+  const n = document.createElement("div"); n.className = "note"; n.style.borderColor = "var(--warn)";
+  n.innerHTML = "<b>Contrôle automatique de la réplique</b> : résolutions à confirmer." +
+    `<ul style="margin:4px 0 0 18px">${liste.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  ajouterFil(n);
 }
 
 function note(texte, complement) {

@@ -64,12 +64,25 @@ Pour revenir à la simulation, définissez `$env:COMEX_MODE = "simulation"` puis
    sont nommées dans la synthèse, l'interface et le compte rendu, et la séance n'est pas enregistrée comme rejeu.
    Sont aussi des lacunes : un message tronqué par le serveur du modèle (tokens lus < 70 % des tokens estimés),
    une réponse qui ne cite pas les objections reçues (O4...), une synthèse qui omet une option ou un critère du
-   cadrage, ou qui cite des sources hors dossier.
+   cadrage, qui cite des sources hors dossier, ou dont un désaccord range un membre sur une autre option que sa
+   position finale (« Stratégie (A : …) » alors que la Stratégie a fini sur C). Dans ce dernier cas, la synthèse
+   est d'abord relancée une fois avec les erreurs nommées (environ une minute de plus), et la meilleure des deux
+   est retenue ; l'interface signale la relance.
 
 **Conformité des réponses.** Chaque réponse est vérifiée contre son schéma JSON (champs obligatoires, noms de
 champs, valeurs autorisées) ; une réponse non conforme est relancée une fois avec la liste des écarts, puis
 traitée comme une erreur. Le schéma de la synthèse impose les identifiants d'option et les libellés exacts des
 critères validés au cadrage (les différences de typographie sont tolérées).
+
+**Chiffres absents du dossier.** Chaque contribution est comparée au dossier : les montants, pourcentages et
+quantités qui n'y figurent pas (calculs, estimations, inventions) sont listés sur sa carte et dans le compte rendu
+(« Chiffres à vérifier »). Ils sont transmis au contradicteur pour la réplique, par objection, et au président,
+qui ne doit pas les présenter comme des faits. Une objection jugée résolue alors que la réponse s'appuie sur de
+tels chiffres reçoit une réserve automatique, transmise à la synthèse et au compte rendu, sans réécrire la réplique.
+Un calcul simple écrit dans la même phrase (part d'un montant, somme, écart, rapport, coût unitaire) est reconnu :
+« avec 40 % d'adoption, les 8,6 M€ tombent à 3,4 M€ » ne signale que « 40 % », comme hypothèse de calcul, qui ne
+déclenche pas de réserve. Un calcul faux (« 646 % » pour 8,6 / 1,03) ou fondé sur un montant inventé reste signalé.
+Une réserve n'est pas une lacune : un seuil assumé (« si l'adoption dépasse 70 % ») déclenche aussi le contrôle.
 
 **Contexte des modèles.** Ollama coupe sans erreur tout message plus long que le `num_ctx` du modèle
 (4 096 tokens par défaut). Donnez à chaque modèle un contexte suffisant (une synthèse fait ~15 000 tokens) :

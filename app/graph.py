@@ -16,6 +16,7 @@ contributions manquantes sont listées (lacunes) : une séance lacunaire n'est p
 import operator
 import re
 import time
+import unicodedata
 from typing import Annotated, TypedDict
 
 from langchain_core.runnables import RunnableConfig
@@ -24,6 +25,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
 from . import agents as A
+from .chiffres import HYPOTHESE, chiffres_hors_dossier, releve
 from .dossier import REF, normaliser_ref, refs_citees
 from .llm import Modeles
 from .runtime import seance_de
@@ -65,6 +67,7 @@ class Etat(TypedDict, total=False):
     objections: list
     reponses: Annotated[dict, fusion_contributions]
     replique: dict
+    reserves: list
     synthese: dict
     lacunes: list
     tronques: Annotated[list, operator.add]
@@ -126,10 +129,16 @@ async def appeler(config: RunnableConfig, agent_id: str, etape: str, consigne: s
         await seance.publier("agent_statut", agent=agent_id, statut="erreur", etape=etape, message=str(e)[:300])
         return None, f"{agent_id}/{etape} : {e}"
 
+    if etape == "reponse" and isinstance(resultat, dict):
+        resultat["reactions_pairs"], corrections = A.reconcilier_reactions(resultat.get("reactions_pairs"), agent_id)
+        if corrections:
+            meta["reactions_corrigees"] = corrections
     # Vérification des sources : chaque référence citée doit exister dans le dossier
     citees = refs_citees(resultat)
     meta["sources"] = sorted(citees & seance.dossier.refs)
     meta["sources_invalides"] = sorted(citees - seance.dossier.refs)
+    # Chiffres avancés sans être dans le dossier : calculs ou inventions, à vérifier
+    meta["chiffres_hors_dossier"] = chiffres_hors_dossier(resultat, seance.dossier.texte)
     lus, estimes = meta.get("tokens_entree"), meta.get("tokens_estimes")
     if not meta.get("simulation") and lus and estimes and lus < SEUIL_TRONCATURE * estimes:
         meta["tronque"] = True
@@ -244,13 +253,61 @@ async def reponse_expert(tache: Tache, config: RunnableConfig):
     return {"reponses": {f"{agent_id}:reponse": res}, **suivi} if res else suivi
 
 
+def chiffres_du_debat(state: Etat, texte_dossier: str, avec_avis: bool = True) -> dict:
+    """Chiffres absents du dossier, par auteur : avis et réponse de chaque expert, contributions du contradicteur."""
+    reponses = state.get("reponses", {})
+    par_auteur = {e: ([sans_meta(a)] if avec_avis else []) + [sans_meta(reponses.get(f"{e}:reponse"))]
+                  for e, a in _avis_par_expert(state).items()}
+    par_auteur["contradicteur"] = [sans_meta(state.get("contre_analyse")), state.get("objections", [])]
+    return releve(par_auteur, texte_dossier)
+
+
+def chiffres_par_objection(state: Etat, texte_dossier: str) -> dict:
+    """{O2: [chiffres absents du dossier]} d'après le texte de la réponse à chaque objection."""
+    par_objection = {}
+    for cle, r in state.get("reponses", {}).items():
+        for item in (r or {}).get("reponses", []):
+            if c := chiffres_hors_dossier(item.get("texte", ""), texte_dossier):
+                par_objection.setdefault(normaliser_id(item.get("objection_id")), []).extend(c)
+    return par_objection
+
+
+def normaliser_id(objection_id) -> str:
+    return str(objection_id or "").strip().upper()
+
+
+def reserves_de_replique(replique: dict | None, par_objection: dict) -> list[str]:
+    """Objections jugées résolues alors que la réponse s'appuie sur des chiffres absents du dossier.
+
+    Constaté (54b71524, rejoué) : même averti, le contradicteur sur un petit modèle juge « résolue » une objection
+    sur la foi d'un ROI recalculé faux. Le contrôle est donc aussi fait par programme ; la réplique n'est pas
+    réécrite, la réserve est transmise au président et au compte rendu."""
+    reserves = []
+    for ev in (replique or {}).get("evaluations", []):
+        oid = normaliser_id(ev.get("objection_id"))
+        # Une hypothèse de calcul (« avec 40 % d'adoption ») est assumée : elle seule ne met pas en réserve
+        douteux = [c for c in par_objection.get(oid, []) if HYPOTHESE not in c.split(" — ")[0]]
+        if ev.get("statut") == "resolue" and douteux:
+            chiffres = ", ".join(c.split(" — ")[0] for c in douteux)
+            reserves.append(f"{oid} jugée résolue par le contradicteur, mais la réponse s'appuie sur des chiffres "
+                            f"absents du dossier ({chiffres}) : résolution à confirmer.")
+    return reserves
+
+
 async def replique(state: Etat, config: RunnableConfig):
-    await seance_de(config).publier("phase", phase="replique")
+    seance = seance_de(config)
+    await seance.publier("phase", phase="replique")
     reponses = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("reponses", {}).items()}
+    par_objection = chiffres_par_objection(state, seance.dossier.texte)
     res, err = await appeler(config, "contradicteur", "replique",
-                             A.prompt_replique(state.get("objections", []), reponses))
+                             A.prompt_replique(state.get("objections", []), reponses, par_objection))
     suivi = _suivi(res, err, "contradicteur", "replique")
-    return {"replique": res, **suivi} if res else suivi
+    if not res:
+        return suivi
+    reserves = reserves_de_replique(sans_meta(res), par_objection)
+    if reserves:
+        await seance.publier("reserves", reserves=reserves)
+    return {"replique": res, "reserves": reserves, **suivi}
 
 
 def lacunes_du_debat(state: Etat) -> list[str]:
@@ -327,6 +384,61 @@ def ecarts_synthese(synthese: dict, cadrage: dict, refs: set[str]) -> list[str]:
     return ecarts
 
 
+# Noms sous lesquels un membre peut être désigné dans un texte (le modèle passe parfois à l'anglais).
+ALIAS_MEMBRES = {"strategie": ["strategy", "strategique"], "finance": ["finances", "financier", "financiere"],
+                 "clients": ["client", "customers", "metiers"], "operations": ["ops"],
+                 "risques": ["risks", "conformite"], "rh": ["hr", "ressources humaines"]}
+# « Finance (A : …) », « Finance et Opérations (Option A sous conditions) », « RH (Prudence/Option C) » ; pas
+# « Opérations (Option C est insuffisante) » ni « (Considère l'Option A faisable) », qui parlent d'une option.
+OPTION_CAMP = re.compile(r"\(\s*(?:[^()/]{0,30}/\s*)?(?:options?\s+)?([A-Z])\s*(?=[):,;.\-–—]|sous\b|avec\b)",
+                         re.IGNORECASE)
+
+
+def _sans_accents(texte: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", str(texte)) if unicodedata.category(c) != "Mn").lower()
+
+
+def _membre(nom: str) -> str | None:
+    nom = _sans_accents(nom).strip(" .:-")
+    return next((e for e in A.EXPERTS
+                 if nom in {e, _sans_accents(A.AGENTS[e]["nom"])} | set(ALIAS_MEMBRES.get(e, []))), None)
+
+
+def _liste_de_membres(texte: str) -> list[str] | None:
+    """Membres d'une liste « Stratégie, Clients et RH » ; None si le texte n'est pas qu'une liste de noms."""
+    morceaux = [m for m in re.split(r"[,/&]|\bet\b|\band\b", _sans_accents(texte)) if m.strip(" .:-")]
+    membres = [_membre(m) for m in morceaux]
+    return membres if membres and all(membres) else None
+
+
+def attributions_inexactes(synthese: dict, positions: dict, options: list) -> list[str]:
+    """Désaccords de la synthèse qui prêtent à un membre une autre option que sa position finale.
+
+    Constaté (séance be1d5427) : « Strategy (A …) vs. Finance (C …) » alors que la Finance est restée sur A et la
+    Stratégie est passée à C, malgré le tableau des positions fourni au président. Chaque camp d'un désaccord
+    (séparé par « vs », « contre » ou « ; ») est lu comme « membres (option …) »."""
+    ids = {str(o.get("id", "")).strip().upper() for o in options}
+    ecarts = []
+    for d in synthese.get("desaccords", []):
+        texte, debut = str(d.get("positions", "")), 0
+        # Chaque « (option X » ferme un camp : ses membres sont le texte depuis la fin du camp précédent, quel que
+        # soit le séparateur (« vs. », « contre », « ; », « . »). Constaté : « Finance (Option A : …). Stratégie (…) ».
+        for m in OPTION_CAMP.finditer(texte):
+            noms = re.sub(r"^(?:\s|[.;,\-–—*]|vs\.?|versus|contre)+", "", texte[debut:m.start()], flags=re.IGNORECASE)
+            fin = texte.find(")", m.end())
+            debut = fin + 1 if fin >= 0 else m.end()
+            membres = _liste_de_membres(noms)
+            if not membres or m.group(1).upper() not in ids:              # pas « membres (option …) »
+                continue
+            option = m.group(1).upper()
+            for e in membres:
+                finale = str((positions.get(e) or {}).get("option_finale") or "").strip().upper()
+                if finale and finale != option:
+                    ecarts.append(f"La synthèse range {A.AGENTS[e]['nom']} sur l'option {option} dans le désaccord "
+                                  f"« {d.get('sujet', '')} », alors que sa position finale est l'option {finale}.")
+    return ecarts
+
+
 def positions_des_membres(state: Etat) -> dict:
     """Positions initiales et finales de chaque expert, calculées à partir des contributions.
 
@@ -345,22 +457,38 @@ def positions_des_membres(state: Etat) -> dict:
 
 
 async def synthese(state: Etat, config: RunnableConfig):
-    await seance_de(config).publier("phase", phase="synthese")
+    seance = seance_de(config)
+    await seance.publier("phase", phase="synthese")
     avis = _avis_par_expert(state)
     reponses = {cle.split(":")[0]: sans_meta(v) for cle, v in state.get("reponses", {}).items()}
     lacunes = lacunes_du_debat(state)
-    res, err = await appeler(config, "president", "synthese",
-                             A.prompt_synthese(sans_meta(state["cadrage"]), avis, sans_meta(state.get("contre_analyse")),
-                                               state.get("objections", []), reponses,
-                                               sans_meta(state.get("replique")), lacunes,
-                                               positions_des_membres(state)),
-                             schema=A.schema_synthese(sans_meta(state["cadrage"])))
+    cadrage = sans_meta(state["cadrage"])
+    positions = positions_des_membres(state)
+    consigne = A.prompt_synthese(cadrage, avis, sans_meta(state.get("contre_analyse")),
+                                 state.get("objections", []), reponses, sans_meta(state.get("replique")), lacunes,
+                                 positions, chiffres_du_debat(state, seance.dossier.texte), state.get("reserves"))
+    schema = A.schema_synthese(cadrage)
+    res, err = await appeler(config, "president", "synthese", consigne, schema=schema)
     suivi = _suivi(res, err, "president", "synthese")
     if not res:
         return {"lacunes": lacunes, **suivi}
+    attributions = attributions_inexactes(sans_meta(res), positions, cadrage.get("options", []))
+    if attributions:
+        # Constaté (be1d5427, rejouée) : même avec le tableau des positions et la consigne de format, le président
+        # range un membre sur son option initiale. Une relance, avec les erreurs nommées, avant d'en faire une lacune.
+        await seance.publier("relance", agent="president", etape="synthese",
+                             message="Synthèse relancée : des désaccords attribuaient à des membres une autre option "
+                                     "que leur position finale.", details=attributions)
+        res2, err2 = await appeler(config, "president", "synthese",
+                                   consigne + A.correction_attributions(attributions, positions), schema=schema)
+        suivi2 = _suivi(res2, err2, "president", "synthese")
+        attributions2 = attributions_inexactes(sans_meta(res2), positions, cadrage.get("options", [])) if res2 else None
+        if res2 and len(attributions2) < len(attributions):    # on garde la meilleure des deux
+            res, attributions, suivi = res2, attributions2, suivi2
+        elif err2:
+            suivi = {**suivi, "erreurs": suivi.get("erreurs", []) + suivi2["erreurs"]}
     # Contrôles a posteriori : la synthèse elle-même peut être tronquée ou incomplète
-    lacunes = lacunes + [_lacune_troncature(t) for t in suivi.get("tronques", [])] + \
-        ecarts_synthese(sans_meta(res), sans_meta(state["cadrage"]), seance_de(config).dossier.refs)
+    lacunes = lacunes + [_lacune_troncature(t) for t in suivi.get("tronques", [])] +         ecarts_synthese(sans_meta(res), cadrage, seance.dossier.refs) + attributions
     return {"synthese": res, "lacunes": lacunes, **suivi}
 
 

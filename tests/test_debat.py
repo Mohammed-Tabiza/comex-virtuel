@@ -450,3 +450,202 @@ def SCHEMAS_SYNTHESE_ID():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReactionsTests(unittest.TestCase):
+    """Séance 2bf62dae : réactions « accord » qui expriment un désaccord, réactions en double au même membre."""
+
+    def test_accord_qui_exprime_un_desaccord_devient_partiel(self):
+        from app.agents import reconcilier_reactions
+        reactions, corrections = reconcilier_reactions([
+            {"membre": "strategie", "accord": "accord",
+             "texte": "Je suis **totalement en accord** sur l'étape C. **Mon désaccord porte sur** sa durée."},
+            {"membre": "clients", "accord": "accord", "texte": "Je partage votre analyse de la valeur [D2-§4]."},
+            {"membre": "finance", "accord": "desaccord", "texte": "Le ROI n'est pas démontré."}], "operations")
+        self.assertEqual([x["accord"] for x in reactions], ["partiel", "accord", "desaccord"])
+        self.assertEqual(corrections, ["réaction à strategie : accord → partiel"])
+
+    def test_reactions_en_double_fusionnees_et_reaction_a_soi_retiree(self):
+        from app.agents import reconcilier_reactions
+        reactions, corrections = reconcilier_reactions([
+            {"membre": "risques", "accord": "accord", "texte": "Les risques juridiques sont critiques."},
+            {"membre": "risques", "accord": "desaccord", "texte": "Les risques financiers sont exagérés."},
+            {"membre": "rh", "accord": "accord", "texte": "Moi-même."}], "rh")
+        self.assertEqual(len(reactions), 1)
+        self.assertEqual(reactions[0]["accord"], "partiel")
+        self.assertIn("exagérés", reactions[0]["texte"])
+        self.assertIn("réactions à risques fusionnées", corrections)
+
+    def test_accord_partiel_garde_en_entier_dans_la_synthese(self):
+        from app.agents import condenser_reponses
+        texte = "Je suis d'accord sur l'étape C. Mon désaccord porte sur sa durée, trop longue [D2-§3]."
+        reponses = condenser_reponses({"operations": {**simulation.REPONSES["operations"], "reactions_pairs": [
+            {"membre": "strategie", "accord": "accord", "texte": texte}]}})
+        self.assertEqual(reponses["operations"]["reactions_pairs"][0],
+                         {"membre": "strategie", "accord": "partiel", "texte": texte})
+
+    def test_partiel_accepte_par_le_schema_et_demande_au_prompt(self):
+        from app.agents import SCHEMAS
+        enum = SCHEMAS["reponse"]["properties"]["reactions_pairs"]["items"]["properties"]["accord"]["enum"]
+        self.assertIn("partiel", enum)
+        self.assertIn('"partiel"', prompt_reponse("rh", {}, [], {}))
+
+
+class ChiffresTests(unittest.TestCase):
+    """Séance 54b71524 : ROI faux (646 %), coûts et capacités inventés, puis validés par la réplique."""
+    DOSSIER = ("Investissement : 1,9 M€, dont 0,3 M€ de formation. Coût annuel complet : 1,03 M€. "
+               "Valeur annuelle : 8,6 M€. Prix : 864 k€ par an pour 2 400 utilisateurs, soit 30 € par mois. "
+               "Grands comptes : 38 % du chiffre d'affaires. Pic : 74 utilisateurs simultanés [D1-§2]. En 2027.")
+
+    def test_chiffres_du_dossier_reconnus_quelle_que_soit_l_ecriture(self):
+        from app.chiffres import chiffres_hors_dossier
+        texte = ("Le budget de 1 900 000 € (1,9 M€) et les 0,3 M€ de formation [D2-§1] couvrent 2 400 "
+                 "collaborateurs ; 38 % du CA ; 864 000 € par an ; 74 utilisateurs ; décision en 2027 ; 3 options.")
+        self.assertEqual(chiffres_hors_dossier({"texte": texte}, self.DOSSIER), [])
+
+    def test_chiffres_inventes_ou_calcules_reperes_avec_leur_contexte(self):
+        from app.chiffres import chiffres_hors_dossier
+        trouves = chiffres_hors_dossier({"arguments": [
+            {"texte": "ROI potentiel de 646 % (8,6 M€ / 1,03 M€).", "sources": ["D2-§4"]},
+            {"texte": "Un test de charge formel (coût : ~30 k€) puis 1 000 utilisateurs simultanés.", "sources": []},
+            {"texte": "Renforcement sécurité : 50–150 k€.", "sources": []}]}, self.DOSSIER)
+        self.assertEqual([t.split(" — ")[0] for t in trouves], ["646 %", "30 k€", "1 000", "50–150 k€"])
+        self.assertIn("ROI potentiel", trouves[0])
+
+    def test_releve_transmis_a_la_replique_et_a_la_synthese(self):
+        from app.agents import CHIFFRES_OBJECTION_TITRE, CHIFFRES_TITRE, prompt_replique, prompt_synthese
+        chiffres = {"finance": ["646 % — « …ROI potentiel de 646 %… »"]}
+        replique = prompt_replique([], {}, {"O2": chiffres["finance"]})
+        self.assertIn(CHIFFRES_OBJECTION_TITRE, replique)
+        self.assertIn("ne peut pas être resolue", replique)
+        self.assertNotIn(CHIFFRES_OBJECTION_TITRE, prompt_replique([], {}))
+        synthese = prompt_synthese(simulation.CADRAGE, {}, {}, [], {}, chiffres=chiffres)
+        self.assertIn("646 %", synthese)
+        self.assertIn("estimation non sourcée", synthese)
+
+    def test_chiffres_notes_dans_la_meta_et_le_compte_rendu(self):
+        modeles = ModelesTest(remplacements={("finance", "avis"): [{
+            **simulation.AVIS["finance"], "resume": "Un ROI de 646 % rend l'option A très attractive."}]})
+        etat = derouler(modeles, "ch000001")
+        avis = next(v for k, v in etat["avis"].items() if k.startswith("finance"))
+        self.assertIn("646 %", " ".join(avis["_meta"]["chiffres_hors_dossier"]))
+        self.assertIn("## Chiffres à vérifier", compte_rendu(SEANCES["ch000001"], etat))
+
+
+class ReservesTests(unittest.TestCase):
+    def test_objection_resolue_sur_chiffres_hors_dossier_mise_en_reserve(self):
+        reponse = {**simulation.REPONSES["strategie"], "reponses": [
+            {"objection_id": "O2", "attitude": "ajuste",
+             "texte": "Avec 70 % d'adoption, le ROI tombe à ~350 % (5,5 M€ / 1,6 M€) [D2-§4]."}]}
+        replique = {**simulation.REPLIQUE, "evaluations": [
+            {**ev, "statut": "resolue"} if ev["objection_id"] == "O2" else ev
+            for ev in simulation.REPLIQUE["evaluations"]]}
+        modeles = ModelesTest(remplacements={("strategie", "reponse"): [reponse],
+                                             ("contradicteur", "replique"): [replique]})
+        etat = derouler(modeles, "rs000001")
+        reserve_o2 = [x for x in etat["reserves"] if x.startswith("O2 ")]
+        self.assertEqual(len(reserve_o2), 1)
+        self.assertIn("350 %", reserve_o2[0])
+        self.assertIn("Réserves du contrôle automatique", compte_rendu(SEANCES["rs000001"], etat))
+        self.assertEqual(statut_final(etat), "terminee")                      # réserve, pas lacune
+
+    def test_pas_de_reserve_sans_chiffre_hors_dossier(self):
+        from app.graph import reserves_de_replique
+        self.assertEqual(reserves_de_replique({"evaluations": [{"objection_id": "O1", "statut": "resolue"}]},
+                                              {"O2": ["646 %"]}), [])
+
+
+class AttributionsTests(unittest.TestCase):
+    """Séances be1d5427 et 1d11bf86 : désaccords de la synthèse qui inversent les positions finales."""
+    POSITIONS = {"strategie": {"option_finale": "C"}, "finance": {"option_finale": "A"},
+                 "operations": {"option_finale": "C"}, "rh": {"option_finale": "A"}}
+    OPTIONS = [{"id": "A"}, {"id": "B"}, {"id": "C"}]
+
+    def ecarts(self, *positions):
+        return G.attributions_inexactes({"desaccords": [{"sujet": "ROI", "positions": p} for p in positions]},
+                                        self.POSITIONS, self.OPTIONS)
+
+    def test_camps_inverses_signales_meme_en_anglais(self):
+        ecarts = self.ecarts("Strategy (A : le gain justifie) vs. Finance (C : ROI trop spéculatif)")
+        self.assertEqual(len(ecarts), 2)
+        self.assertIn("range Stratégie sur l'option A", ecarts[0])
+
+    def test_liste_de_membres_et_formes_variees(self):
+        self.assertEqual(len(self.ecarts("Stratégie, Opérations et RH (Prudence/Option C) contre Finance (Option A)")), 1)
+        self.assertEqual(self.ecarts("Stratégie et Opérations (Option C sous conditions) ; Finance, RH (A)"), [])
+
+    def test_phrases_qui_parlent_d_une_option_ignorees(self):
+        self.assertEqual(self.ecarts("Opérations est en désaccord avec l'évaluation favorable de l'Option A",
+                                     "RH (Option C est insuffisante) vs. Finance (Considère l'Option C trop lente)"), [])
+
+    def synthese_inversee(self):
+        import copy
+        finales = G.positions_des_membres(derouler(ModelesTest(), "at000000"))
+        membre, pos = next(iter(finales.items()))
+        autre = next(o["id"] for o in simulation.CADRAGE["options"] if o["id"] != pos["option_finale"])
+        synthese = copy.deepcopy(simulation.reponse("president", "synthese"))
+        synthese["desaccords"] = [{"sujet": "Test", "positions": f"{A_NOMS[membre]} ({autre} : raison)"}]
+        return synthese, autre
+
+    def test_inversion_corrigee_par_la_relance(self):
+        synthese, autre = self.synthese_inversee()
+        etat = derouler(ModelesTest(remplacements={("president", "synthese"): [synthese]}), "at000001")
+        self.assertFalse(any(f"sur l'option {autre}" in x for x in etat["lacunes"]))   # 2e appel : synthèse juste
+        relances = [e for e in SEANCES["at000001"].evenements if e["type"] == "relance"]
+        self.assertEqual(len(relances), 1)
+        self.assertEqual(statut_final(etat), "terminee")
+
+    def test_inversion_persistante_apres_relance_est_une_lacune(self):
+        import copy
+        synthese, autre = self.synthese_inversee()
+        etat = derouler(ModelesTest(remplacements={("president", "synthese"): [synthese, copy.deepcopy(synthese)]}),
+                        "at000002")
+        self.assertTrue(any(f"sur l'option {autre}" in x for x in etat["lacunes"]))
+        self.assertEqual(statut_final(etat), "incomplete")
+
+    def test_consigne_de_correction(self):
+        from app.agents import correction_attributions
+        texte = correction_attributions(["La synthèse range Stratégie sur l'option A …"],
+                                        {"strategie": {"option_finale": "C"}, "finance": {"option_finale": "A"}})
+        self.assertIn("Stratégie → C", texte)
+        self.assertIn("Finance → A", texte)
+        self.assertIn("range Stratégie sur l'option A", texte)
+
+    def test_consigne_de_format_et_noms_francais(self):
+        from app.agents import prompt_synthese
+        prompt = prompt_synthese(simulation.CADRAGE, {}, {}, [], {})
+        self.assertIn("Membre, Membre (option X : leur raison en une phrase)", prompt)
+        self.assertIn("Stratégie, Finance, Clients, Opérations, Risques, RH", prompt)
+
+
+A_NOMS = {e: a["nom"] for e, a in __import__("app.agents", fromlist=["AGENTS"]).AGENTS.items()}
+
+
+class CalculsTests(unittest.TestCase):
+    """Séance be1d5427 : « avec 40 % d'adoption, la valeur tombe à 3,4 M€ » (40 % × 8,6 M€) mis en réserve à tort."""
+    DOSSIER = "Valeur annuelle : 8,6 M€. Coût annuel complet : 1,03 M€. 2 400 collaborateurs."
+
+    def lus(self, texte):
+        from app.chiffres import chiffres_hors_dossier
+        return [c.split(" — ")[0] for c in chiffres_hors_dossier(texte, self.DOSSIER)]
+
+    def test_calcul_reconnu_et_hypothese_etiquetee(self):
+        self.assertEqual(self.lus("Avec 40 % d'adoption, les 8,6 M€ tombent à 3,4 M€ ; à 60-70 %, 5-6 M€."),
+                         ["40 % (hypothèse de calcul)", "60-70 % (hypothèse de calcul)"])
+
+    def test_calcul_faux_ou_donnee_inventee_toujours_signales(self):
+        self.assertEqual(self.lus("ROI de 646 % (8,6 M€ / 1,03 M€)."), ["646 %"])
+        self.assertEqual(self.lus("ROI de ~350 % (5,5 M€ / 1,6 M€)."), ["350 %", "5,5 M€", "1,6 M€"])
+
+    def test_hypothese_de_calcul_ne_met_pas_en_reserve(self):
+        from app.graph import reserves_de_replique
+        replique = {"evaluations": [{"objection_id": "O2", "statut": "resolue"}]}
+        self.assertEqual(reserves_de_replique(replique, {"O2": ["40 % (hypothèse de calcul) — « … »"]}), [])
+        self.assertEqual(len(reserves_de_replique(replique, {"O2": ["1,6 M€ — « … »"]})), 1)
+
+
+class AttributionsFormesTests(AttributionsTests):
+    def test_camps_separes_par_un_point(self):
+        ecarts = self.ecarts("Finance (Option A : ROI élevé). Stratégie (Option A : gains). RH (Option C : prudence).")
+        self.assertEqual(len(ecarts), 2)                                   # Stratégie sur A, RH sur C
+        self.assertTrue(any("range RH sur l'option C" in x for x in ecarts))

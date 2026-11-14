@@ -7,6 +7,7 @@ POSITIONS = {"favorable": "Favorable", "favorable_sous_conditions": "Favorable s
              "reserve": "Réservé", "defavorable": "Défavorable"}
 STATUTS_OBJECTION = {"resolue": "résolue", "partiellement_resolue": "partiellement résolue",
                      "non_resolue": "non résolue"}
+ACCORDS = {"accord": "accord", "partiel": "accord partiel", "desaccord": "désaccord"}
 
 
 def _liste(items) -> str:
@@ -49,6 +50,8 @@ def compte_rendu(seance, etat: dict) -> str:
               for p in option.get("preuves", [])] or ["- (aucune preuve fournie)"]
         l += ["", "#### Objections", _liste(option.get("objections")),
               "", "#### Incertitudes", _liste(option.get("incertitudes"))]
+    if etat.get("reserves"):
+        l += ["", "> **Réserves du contrôle automatique sur la réplique :**", *[f"> - {x}" for x in etat["reserves"]]]
     l += ["", "## Accords", _liste(syn.get("accords")), "", "## Désaccords persistants"]
     l += [f"- **{d['sujet']}** : {d['positions']}" for d in syn.get("desaccords", [])] or ["- (aucun)"]
     l += ["", "## Hypothèses fragiles", _liste(syn.get("hypotheses_fragiles")), "",
@@ -70,8 +73,18 @@ def compte_rendu(seance, etat: dict) -> str:
                  for x in r.get("reactions_pairs", [])]
     if reactions:
         l += ["", "## Échanges entre membres"]
-        l += [f"- **{AGENTS[a]['nom']} → {AGENTS[x['membre']]['nom']}** ({x['accord']}) : {x['texte']}"
+        l += [f"- **{AGENTS[a]['nom']} → {AGENTS[x['membre']]['nom']}** ({ACCORDS.get(x['accord'], x['accord'])}) : {x['texte']}"
               for a, x in reactions if x.get("membre") in AGENTS]
+    chiffres = [(cle, x) for groupe in ("cadrage", "contre_analyse", "replique", "synthese")
+                for cle, x in [(groupe, etat.get(groupe))] if x] + \
+        [(cle, x) for groupe in ("avis", "reponses") for cle, x in (etat.get(groupe) or {}).items()]
+    chiffres = [(cle, c) for cle, x in chiffres if (c := (x.get("_meta") or {}).get("chiffres_hors_dossier"))]
+    if chiffres:
+        l += ["", "## Chiffres à vérifier",
+              "*Chiffres avancés par les membres sans figurer dans le dossier : calculs ou estimations à contrôler "
+              "avant de s'y fier.*"]
+        for cle, liste in chiffres:
+            l += [f"- **{cle}**"] + [f"  - {c}" for c in liste]
     l += ["", "## Décision humaine", seance.decision_humaine or "(non renseignée)"]
     if etat.get("erreurs"):
         l += ["", "## Incidents", _liste(etat["erreurs"])]
