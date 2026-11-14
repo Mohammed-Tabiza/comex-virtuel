@@ -81,6 +81,12 @@ ollama create nemotron-3-nano:4b-32k -f Modelfile.nemotron
 
 puis indiquez dans `config.yaml` le nom du nouveau modèle et son vrai contexte (`contexte_max`) : un appel dont
 l'entrée estimée plus la sortie maximale dépasse `contexte_max` est refusé avant envoi.
+
+**Réflexion des modèles (`thinking`).** Avec `famille: ollama`, `thinking: false` coupe la réflexion
+(`reasoning_effort: none`) ; sinon les modèles « thinking » (Nemotron, Gemma 4) réfléchissent par défaut, et
+cette réflexion compte dans `max_tokens`. Si une réponse est coupée faute de budget, ou vide parce que le modèle
+a écrit son JSON dans sa réflexion, l'appel récupère ce JSON s'il est complet, sinon il est relancé une fois
+sans réflexion. Pour un petit modèle, `thinking: false` est recommandé, en particulier pour la synthèse.
 8. **Arbitrage** : vous saisissez votre décision ; le compte rendu Markdown est téléchargeable.
 
 Chaque contribution est attribuée, horodatée, liée au modèle qui l'a produite, et jamais réécrite.

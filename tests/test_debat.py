@@ -10,7 +10,7 @@ from app import simulation
 from app.agents import EXPERTS, prompt_reponse
 from app.config import charger_config
 from app.dossier import charger_dossier
-from app.llm import Modeles
+from app.llm import Modeles, Sortie
 from app.rapport import compte_rendu
 from app.runtime import SEANCES, Seance
 from app.server import statut_final
@@ -185,11 +185,15 @@ class ModelesFlux(Modeles):
         config = charger_config()
         config["mode"] = "reel"
         super().__init__(config)
-        self.textes, self.messages_recus = list(textes), []
+        self.textes, self.messages_recus, self.reflexions = list(textes), [], []
 
     async def _flux(self, client, modele, thinking, etape, messages, mode, on_flux, schema):
         self.messages_recus.append(messages)
-        return self.textes.pop(0), {"tokens_entree": 10, "tokens_sortie": 10}
+        self.reflexions.append(thinking)
+        texte = self.textes.pop(0)
+        if isinstance(texte, Sortie):
+            return texte
+        return Sortie(contenu=texte, fin="stop", usage={"tokens_entree": 10, "tokens_sortie": 10})
 
 
 class SchemaTests(unittest.TestCase):
@@ -250,6 +254,71 @@ class SchemaTests(unittest.TestCase):
             for etape in ("avis", "reponse"):
                 self.assertEqual(ecarts_schema(simulation.reponse(agent, etape), SCHEMAS[etape]), [], (agent, etape))
         self.assertEqual(ecarts_schema(self.bonne, schema_synthese(simulation.CADRAGE)), [])
+
+
+class ReflexionTests(unittest.TestCase):
+    """Cas observés lors des séances réelles 5a4904c3 et c15324b9 (Nemotron « thinking » sous Ollama)."""
+
+    def setUp(self):
+        import json
+        self.json = json
+        self.cadrage = json.dumps(simulation.CADRAGE, ensure_ascii=False)
+        self.messages = [{"role": "user", "content": "cadrage"}]
+
+    def test_json_ecrit_dans_la_reflexion_est_recupere(self):
+        # 5a4904c3 : réponse vide, JSON complet dans le canal de réflexion (précédé d'une ébauche inachevée)
+        reflexion = 'Ébauche : {"question_reformulee": "brouillon", "options": [{"id": "A"' + "\n" + self.cadrage
+        modeles = ModelesFlux([Sortie(contenu="", raisonnement=reflexion, fin="stop")])
+        resultat, _ = asyncio.run(modeles.generer("president", "cadrage", self.messages, None))
+        self.assertEqual(resultat, simulation.CADRAGE)
+        self.assertEqual(len(modeles.messages_recus), 1)
+
+    def test_reponse_coupee_relancee_sans_reflexion(self):
+        # c15324b9 : la réflexion épuise max_tokens et la réponse s'arrête au milieu du JSON
+        coupee = Sortie(contenu='{"question_reformulee": "Quel', raisonnement="We need to produce JSON... " * 200,
+                        fin="length")
+        modeles = ModelesFlux([coupee, self.cadrage])
+        resultat, usage = asyncio.run(modeles.generer("president", "cadrage", self.messages, None))
+        self.assertEqual(resultat, simulation.CADRAGE)
+        self.assertEqual(modeles.reflexions, [True, False])          # président : thinking true dans config.yaml
+        self.assertTrue(usage["reflexion_coupee"])
+
+    def test_deux_reponses_coupees_donnent_une_cause_exacte(self):
+        from app.llm import ErreurModele
+        coupee = Sortie(contenu='{"recommandation": "Option', raisonnement="x" * 33083, fin="length")
+        modeles = ModelesFlux([coupee, coupee])
+        with self.assertRaisesRegex(ErreurModele, r"budget de 6144 tokens épuisé, dont 33083 caractères de réflexion"):
+            asyncio.run(modeles.generer("president", "synthese", self.messages, None))
+
+    def test_thinking_false_coupe_la_reflexion_d_ollama(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        async def flux_vide():
+            if False:
+                yield None
+
+        async def parametres(famille, thinking):
+            create = AsyncMock(side_effect=lambda **kw: flux_vide())
+            client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+            modeles = object.__new__(Modeles)
+            modeles.config = {"protocole": {}}
+            await modeles._flux(client, {"model": "m", "famille": famille}, thinking, "avis", [], "consigne", None)
+            return create.call_args.kwargs
+
+        self.assertEqual(asyncio.run(parametres("ollama", False))["reasoning_effort"], "none")
+        self.assertNotIn("reasoning_effort", asyncio.run(parametres("ollama", True)))
+        qwen = asyncio.run(parametres("qwen", False))
+        self.assertNotIn("reasoning_effort", qwen)
+        self.assertFalse(qwen["extra_body"]["chat_template_kwargs"]["enable_thinking"])
+
+    def test_dernier_json_ignore_les_fragments(self):
+        from app.agents import SCHEMAS
+        from app.llm import dernier_json
+        texte = 'Plan {"a": 1} puis brouillon {"question_reformulee": "x", "options": [{"id": "A"}] … fin'
+        self.assertIsNone(dernier_json(texte, SCHEMAS["cadrage"]))
+        self.assertEqual(dernier_json(texte), {"id": "A"})
+        self.assertEqual(dernier_json("aucun JSON"), None)
 
 
 def SCHEMAS_SYNTHESE_ID():
