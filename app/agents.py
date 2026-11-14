@@ -220,10 +220,57 @@ def prefixe_commun(dossier_texte: str) -> str:
     )
 
 
-def _bloc(titre: str, contenu) -> str:
+def _bloc(titre: str, contenu, compact: bool = False) -> str:
     if not isinstance(contenu, str):
-        contenu = json.dumps(contenu, ensure_ascii=False, indent=1)
+        contenu = json.dumps(contenu, ensure_ascii=False, separators=(",", ":")) if compact \
+            else json.dumps(contenu, ensure_ascii=False, indent=1)
     return f"## {titre}\n{contenu}\n"
+
+
+# --------------------------------------------------------------------------- condensation pour la synthèse
+# Constaté (séance 5992576d) : avec des experts bavards, le message de synthèse atteignait 25 000 tokens,
+# soit 92 % de la fenêtre de 32 768. Le président reçoit donc une version condensée des contributions.
+CHAMPS_AVIS_SYNTHESE = ("position", "option_preferee", "confiance", "resume", "arguments", "conditions_changement")
+CHAMPS_CADRAGE_SYNTHESE = ("question_reformulee", "decision_attendue", "options", "criteres", "contraintes",
+                           "informations_manquantes")
+
+
+def _sans_gras(valeur):
+    """Retire le gras Markdown (**…**) des textes, sans autre changement."""
+    if isinstance(valeur, str):
+        return valeur.replace("**", "")
+    if isinstance(valeur, list):
+        return [_sans_gras(v) for v in valeur]
+    if isinstance(valeur, dict):
+        return {k: _sans_gras(v) for k, v in valeur.items()}
+    return valeur
+
+
+def _premiere_phrase(texte: str, maxi: int = 220) -> str:
+    texte = " ".join(str(texte).split())
+    for fin in (". ", " ; ", " : "):
+        i = texte.find(fin)
+        if 0 < i < maxi:
+            return texte[:i + 1].rstrip(" ;:") + ("." if fin != ". " else "")
+    return texte if len(texte) <= maxi else texte[:maxi].rsplit(" ", 1)[0] + "…"
+
+
+def condenser_avis(avis: dict) -> dict:
+    """Avis réduits à ce qui sert la synthèse. Les risques, hypothèses et inconnues de chaque membre sont
+    couverts par la contre-analyse, les objections et les informations manquantes du cadrage."""
+    return {e: _sans_gras({k: a[k] for k in CHAMPS_AVIS_SYNTHESE if k in a}) for e, a in avis.items()}
+
+
+def condenser_reponses(reponses: dict) -> dict:
+    """Réponses complètes ; réactions entre pairs : désaccords en entier, accords réduits à leur première phrase."""
+    condensees = {}
+    for e, r in reponses.items():
+        r = _sans_gras(dict(r))
+        r["reactions_pairs"] = [
+            x if x.get("accord") == "desaccord" else {**x, "texte": _premiere_phrase(x.get("texte", ""))}
+            for x in r.get("reactions_pairs", []) if x.get("membre") != e]          # pas de réaction à soi-même
+        condensees[e] = r
+    return condensees
 
 
 def _role(agent_id: str) -> str:
@@ -320,16 +367,21 @@ def prompt_replique(objections: list, reponses: dict) -> str:
 def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections: list, reponses: dict,
                     replique: dict | None = None, lacunes: list | None = None,
                     positions: dict | None = None) -> str:
-    texte = _role("president") + _bloc("Cadrage", cadrage) + _bloc("Avis initiaux", avis) + \
-        _bloc("Contre-analyse", contre_analyse) + _bloc("Objections", objections) + \
-        _bloc("Réponses aux objections et réactions entre membres", reponses)
+    cadrage_utile = {k: cadrage[k] for k in CHAMPS_CADRAGE_SYNTHESE if k in cadrage}
+    texte = _role("president") + _bloc("Cadrage", cadrage_utile, compact=True) + \
+        _bloc("Avis initiaux (condensés : position, option, résumé, arguments sourcés, conditions de changement)",
+              condenser_avis(avis), compact=True) + \
+        _bloc("Contre-analyse", _sans_gras(contre_analyse), compact=True) + \
+        _bloc("Objections", _sans_gras(objections), compact=True) + \
+        _bloc("Réponses aux objections et réactions entre membres (accords résumés, désaccords en entier)",
+              condenser_reponses(reponses), compact=True)
     if replique:
-        texte += _bloc("Réplique du contradicteur (statut de chaque objection)", replique)
+        texte += _bloc("Réplique du contradicteur (statut de chaque objection)", _sans_gras(replique), compact=True)
     if lacunes:
         texte += _bloc("Lacunes du débat (contributions manquantes)", lacunes)
     if positions:
         texte += _bloc("Positions des membres, initiales et finales (calculées à partir des contributions, "
-                       "elles font foi)", positions)
+                       "elles font foi)", positions, compact=True)
     return texte + (
         "## Tâche : synthèse pour le décideur\n"
         "Restitue les options avec leurs arguments pour et contre, les accords, les désaccords persistants "

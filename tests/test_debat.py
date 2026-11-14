@@ -411,6 +411,38 @@ class SeanceLongueTests(unittest.TestCase):
         self.assertIn("Positions des membres, initiales et finales", consigne)
 
 
+class CondensationTests(unittest.TestCase):
+    """Séance 5992576d : message de synthèse à 92 % de la fenêtre de contexte."""
+
+    def test_avis_et_reponses_condenses_pour_la_synthese(self):
+        from app.agents import condenser_avis, condenser_reponses
+        avis = condenser_avis({"finance": {**simulation.AVIS["finance"], "resume": "L'**Option A** est viable."}})
+        self.assertEqual(set(avis["finance"]), {"position", "option_preferee", "confiance", "resume", "arguments",
+                                                "conditions_changement"})
+        self.assertEqual(avis["finance"]["resume"], "L'Option A est viable.")
+        long_accord = "Je suis d'accord avec la stratégie. " + "Développement très long. " * 30
+        reponses = condenser_reponses({"rh": {**simulation.REPONSES["rh"], "reactions_pairs": [
+            {"membre": "strategie", "accord": "accord", "texte": long_accord},
+            {"membre": "finance", "accord": "desaccord", "texte": long_accord},
+            {"membre": "rh", "accord": "accord", "texte": "Je suis d'accord avec moi-même."}]}})
+        reactions = reponses["rh"]["reactions_pairs"]
+        self.assertEqual([x["membre"] for x in reactions], ["strategie", "finance"])   # réaction à soi retirée
+        self.assertEqual(reactions[0]["texte"], "Je suis d'accord avec la stratégie.")
+        self.assertEqual(reactions[1]["texte"], long_accord)                           # désaccord gardé en entier
+
+    def test_le_message_de_synthese_est_plus_court(self):
+        import json
+        from app.agents import _role, prompt_synthese
+        from app.dossier import estimer_tokens
+        avis = {e: simulation.AVIS[e] for e in EXPERTS}
+        reponses = {e: simulation.REPONSES[e] for e in EXPERTS}
+        brut = sum(estimer_tokens(json.dumps(x, ensure_ascii=False, indent=1)) for x in (avis, reponses))
+        prompt = prompt_synthese(simulation.CADRAGE, avis, simulation.CONTRE_ANALYSE,
+                                 simulation.OBJECTIONS["objections"], reponses)
+        self.assertLess(estimer_tokens(prompt) - estimer_tokens(_role("president")), brut + 2500)
+        self.assertNotIn('"hypotheses"', prompt.split("## Contre-analyse")[0])
+
+
 def SCHEMAS_SYNTHESE_ID():
     from app.agents import SCHEMAS
     return SCHEMAS["synthese"]["properties"]["options"]["items"]["properties"]["id"]
