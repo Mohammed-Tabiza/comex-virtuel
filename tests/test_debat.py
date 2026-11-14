@@ -174,7 +174,7 @@ class GardeFousTests(unittest.TestCase):
             m["contexte_max"] = 4096
         modeles = Modeles(config)
         messages = [{"role": "system", "content": "x" * 20000}, {"role": "user", "content": "y"}]
-        with self.assertRaisesRegex(ErreurModele, "contexte_max 4096"):
+        with self.assertRaisesRegex(ErreurModele, "contexte effectif 4096"):
             asyncio.run(modeles.generer("president", "synthese", messages, None))
 
 
@@ -287,7 +287,7 @@ class ReflexionTests(unittest.TestCase):
         from app.llm import ErreurModele
         coupee = Sortie(contenu='{"recommandation": "Option', raisonnement="x" * 33083, fin="length")
         modeles = ModelesFlux([coupee, coupee])
-        with self.assertRaisesRegex(ErreurModele, r"budget de 6144 tokens épuisé, dont 33083 caractères de réflexion"):
+        with self.assertRaisesRegex(ErreurModele, r"budget de sortie de 6144 tokens ou fenêtre de contexte atteint, dont 33083 caractères de réflexion"):
             asyncio.run(modeles.generer("president", "synthese", self.messages, None))
 
     def test_thinking_false_coupe_la_reflexion_d_ollama(self):
@@ -319,6 +319,96 @@ class ReflexionTests(unittest.TestCase):
         self.assertIsNone(dernier_json(texte, SCHEMAS["cadrage"]))
         self.assertEqual(dernier_json(texte), {"id": "A"})
         self.assertEqual(dernier_json("aucun JSON"), None)
+
+
+class ModelesLents(ModelesFlux):
+    """Le « serveur » met `lenteurs[i]` secondes à répondre à la tentative i."""
+
+    def __init__(self, textes, lenteurs):
+        super().__init__(textes)
+        self.lenteurs = list(lenteurs)
+        self.config["protocole"]["delai_max_appel"] = 0.2
+
+    async def _flux(self, *args, **kwargs):
+        await asyncio.sleep(self.lenteurs.pop(0))
+        return await super()._flux(*args, **kwargs)
+
+
+class SeanceLongueTests(unittest.TestCase):
+    """Cas observés lors des séances réelles e8cb440a (Ministral, 4 h 31) et 1d11bf86 / b4ef4fb4."""
+
+    def setUp(self):
+        import json
+        self.cadrage = json.dumps(simulation.CADRAGE, ensure_ascii=False)
+        self.messages = [{"role": "user", "content": "cadrage"}]
+
+    def test_un_appel_trop_long_est_interrompu_puis_relance(self):
+        modeles = ModelesLents([self.cadrage], lenteurs=[5, 0])
+        resultat, _ = asyncio.run(modeles.generer("president", "cadrage", self.messages, None))
+        self.assertEqual(resultat, simulation.CADRAGE)
+
+    def test_deux_appels_trop_longs_sont_une_erreur(self):
+        from app.llm import ErreurModele
+        modeles = ModelesLents([], lenteurs=[5, 5])
+        with self.assertRaisesRegex(ErreurModele, "Délai maximal de 0.2 s dépassé deux fois"):
+            asyncio.run(modeles.generer("president", "cadrage", self.messages, None))
+
+    def test_une_fenetre_pleine_est_nommee(self):
+        from app.llm import ErreurModele
+        coupee = Sortie(contenu='{"recommandation": "A', fin="length",
+                        usage={"tokens_entree": 14162, "tokens_sortie": 2200})
+        modeles = ModelesFlux([coupee, coupee])
+        modeles.contextes_reels["gemma"] = 16384
+        modeles.config["agents"]["president"]["modele"] = "gemma"
+        with self.assertRaisesRegex(ErreurModele, r"fenêtre de contexte de gemma pleine \(14162 tokens lus \+ 2200"):
+            asyncio.run(modeles.generer("president", "cadrage", self.messages, None))
+
+    def test_le_vrai_num_ctx_d_ollama_l_emporte_sur_contexte_max(self):
+        from unittest.mock import MagicMock, patch
+        from app import llm
+
+        def show(url, json, timeout):
+            reponse = MagicMock()
+            reponse.json.return_value = {"parameters": "num_ctx 16384\ntemperature 1"} \
+                if "16k" in json["model"] else {"parameters": "temperature 1"}
+            return reponse
+
+        config = charger_config()
+        config["mode"] = "reel"
+        config["modeles"] = {"g": {"libelle": "G", "famille": "ollama", "base_url": "http://x:11434/v1",
+                                   "model": "gemma-16k", "contexte_max": 32768, "hebergement": "interne"},
+                             "n": {"libelle": "N", "famille": "ollama", "base_url": "http://x:11434/v1",
+                                   "model": "nemotron", "contexte_max": 32768, "hebergement": "interne"}}
+        config["agents"] = {"president": {"modele": "g"}, "finance": {"modele": "n"}}
+        modeles = llm.Modeles(config)
+        with patch.object(llm.httpx, "post", side_effect=show):
+            messages = modeles.verifier_contextes()
+        self.assertEqual(modeles.contexte_de("g", config["modeles"]["g"]), 16384)
+        self.assertEqual(modeles.contexte_de("n", config["modeles"]["n"]), 4096)
+        self.assertIn("contexte_max 32768 déclaré, mais Ollama applique 16384", " ".join(messages))
+        self.assertIn("valeur par défaut d'Ollama supposée", " ".join(messages))
+        self.assertEqual(llm.contexte_ollama("http://127.0.0.1:9/v1", "m", delai=0.2)[0], None)   # serveur absent
+
+    def test_references_avec_trait_d_union_insecable(self):
+        from app.dossier import refs_citees
+        from app.graph import ecarts_synthese
+        dossier = charger_dossier(DOSSIER)
+        self.assertEqual(refs_citees("capacité inconnue [D0‑§6] et [D1–§2]"), {"D0-§6", "D1-§2"})
+        self.assertIsNotNone(dossier.section("D0‑§6"))
+        synthese = simulation.reponse("president", "synthese")
+        synthese["options"][0]["preuves"][0]["sources"] = ["D0‑§6"]
+        self.assertEqual(ecarts_synthese(synthese, simulation.CADRAGE, dossier.refs), [])
+
+    def test_le_president_recoit_les_positions_finales(self):
+        from app.graph import positions_des_membres
+        modeles = ModelesTest()
+        etat = derouler(modeles, "pos00001")
+        positions = positions_des_membres(etat)
+        self.assertEqual(set(positions), set(EXPERTS))
+        self.assertEqual(positions["finance"]["option_initiale"], simulation.AVIS["finance"]["option_preferee"])
+        self.assertEqual(positions["finance"]["option_finale"], simulation.REPONSES["finance"]["option_revisee"])
+        consigne = next(c for a, e, c in modeles.appels if e == "synthese")
+        self.assertIn("Positions des membres, initiales et finales", consigne)
 
 
 def SCHEMAS_SYNTHESE_ID():

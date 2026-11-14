@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable
 
+import httpx
 from openai import AsyncOpenAI
 
 from .agents import SCHEMAS, ecarts_schema
@@ -68,9 +69,28 @@ class Sortie:
     usage: dict = field(default_factory=dict)
 
 
+def contexte_ollama(base_url: str, modele: str, delai: float = 3.0) -> tuple[int | None, str]:
+    """Fenêtre de contexte réellement appliquée par Ollama à un modèle : (num_ctx, explication).
+
+    Sans paramètre num_ctx dans le modèle, Ollama applique sa valeur par défaut (4 096 tokens, ou
+    OLLAMA_CONTEXT_LENGTH du serveur) et tronque sans erreur au-delà : constaté avec Nemotron.
+    """
+    racine = re.sub(r"/v1/?$", "", base_url.rstrip("/"))
+    try:
+        reponse = httpx.post(f"{racine}/api/show", json={"model": modele}, timeout=delai)
+        reponse.raise_for_status()
+    except Exception as e:  # noqa: BLE001 - serveur absent ou pas Ollama : rien à vérifier
+        return None, f"contexte non vérifié ({type(e).__name__})"
+    trouve = re.search(r"^\s*num_ctx\s+(\d+)", reponse.json().get("parameters", "") or "", re.MULTILINE)
+    if trouve:
+        return int(trouve.group(1)), "num_ctx du modèle"
+    return 4096, "aucun num_ctx dans le modèle : valeur par défaut d'Ollama supposée (4 096)"
+
+
 class Modeles:
     def __init__(self, config: dict):
         self.config = config
+        self.contextes_reels: dict[str, int] = {}   # renseigné par verifier_contextes()
         self.simulation = config["mode"] != "reel"
         self.sortie = config["protocole"].get("sortie_structuree", "json_schema")
         self.clients: dict[str, AsyncOpenAI] = {}
@@ -80,6 +100,33 @@ class Modeles:
             if not self.simulation and m.get("base_url"):
                 self.clients[nom] = AsyncOpenAI(base_url=m["base_url"], api_key=m.get("api_key") or "EMPTY",
                                                 timeout=600, max_retries=1)
+
+    def verifier_contextes(self) -> list[str]:
+        """Interroge Ollama sur la fenêtre réelle de chaque modèle utilisé ; renvoie des messages à afficher."""
+        messages = []
+        if self.simulation:
+            return messages
+        utilises = {r["modele"] for r in self.config["agents"].values()}
+        for nom in sorted(utilises):
+            m = self.config["modeles"][nom]
+            if m.get("famille") != "ollama" or not m.get("base_url"):
+                continue
+            reel, origine = contexte_ollama(m["base_url"], m["model"])
+            if reel is None:
+                messages.append(f"{nom} : {origine}")
+                continue
+            self.contextes_reels[nom] = reel
+            declare = m.get("contexte_max")
+            if declare and declare > reel:
+                messages.append(f"{nom} : contexte_max {declare} déclaré, mais Ollama applique {reel} ({origine}). "
+                                f"La valeur {reel} est retenue.")
+            else:
+                messages.append(f"{nom} : contexte effectif {min(reel, declare or reel)} ({origine}).")
+        return messages
+
+    def contexte_de(self, nom: str, modele: dict) -> int | None:
+        valeurs = [v for v in (modele.get("contexte_max"), self.contextes_reels.get(nom)) if v]
+        return min(valeurs) if valeurs else None
 
     def modele_de(self, agent_id: str) -> tuple[str, dict, bool]:
         reglage = self.config["agents"][agent_id]
@@ -98,10 +145,10 @@ class Modeles:
         estimes = estimer_tokens("".join(m["content"] for m in messages))
         if not self.simulation:
             # Un appel qui ne tient pas dans la fenêtre du modèle serait tronqué sans erreur par le serveur
-            contexte, sortie = modele.get("contexte_max"), self.max_tokens_de(modele, etape)
+            contexte, sortie = self.contexte_de(nom, modele), self.max_tokens_de(modele, etape)
             if contexte and estimes + sortie > contexte:
                 raise ErreurModele(f"message trop long pour {nom} : ~{estimes} tokens en entrée + {sortie} en sortie "
-                                   f"> contexte_max {contexte}")
+                                   f"> contexte effectif {contexte}")
         debut = time.time()
         async with self.verrous[nom]:
             if self.simulation:
@@ -123,9 +170,19 @@ class Modeles:
         """
         client = self.clients[nom]
         mode, reflexion = self.sortie, thinking
+        delai = self.config["protocole"].get("delai_max_appel", 600)
         for tentative in range(2):
             try:
-                sortie = await self._flux(client, modele, reflexion, etape, messages, mode, on_flux, schema)
+                # Un appel qui s'emballe (constaté : Ministral bloqué 3 h 50 à répéter des objets vides,
+                # sur une carte saturée) est interrompu au lieu de bloquer la séance.
+                sortie = await asyncio.wait_for(
+                    self._flux(client, modele, reflexion, etape, messages, mode, on_flux, schema), timeout=delai)
+            except asyncio.TimeoutError:
+                if tentative == 1:
+                    raise ErreurModele(f"Délai maximal de {delai} s dépassé deux fois (delai_max_appel) : "
+                                       "modèle trop lent ou sortie qui s'emballe")
+                reflexion = False
+                continue
             except Exception as e:  # noqa: BLE001 - on tente une fois sans sortie contrainte
                 if tentative == 1 or mode == "consigne":
                     raise ErreurModele(f"{type(e).__name__} : {e}") from e
@@ -139,9 +196,7 @@ class Modeles:
                 resultat = dernier_json(sortie.raisonnement, schema)
             if resultat is None:
                 if sortie.fin == "length":
-                    cause = f"réponse coupée : budget de {self.max_tokens_de(modele, etape)} tokens épuisé"
-                    if sortie.raisonnement:
-                        cause += f", dont {len(sortie.raisonnement)} caractères de réflexion"
+                    cause = self._cause_coupure(nom, modele, etape, sortie)
                 elif not sortie.contenu.strip():
                     cause = "réponse vide" + (", JSON absent de la réflexion" if sortie.raisonnement else "")
                 else:
@@ -170,6 +225,21 @@ class Modeles:
                 {"role": "user", "content": "Ta réponse ne respecte pas le schéma demandé :\n- "
                  + "\n- ".join(ecarts[:10]) + "\nRenvoie l'objet JSON complet corrigé, avec exactement les noms "
                  "de champs et les valeurs autorisées du schéma, sans texte autour."}]
+
+    def _cause_coupure(self, nom: str, modele: dict, etape: str, sortie: "Sortie") -> str:
+        """Explique une réponse coupée : fenêtre de contexte pleine, ou budget de sortie épuisé."""
+        lus, produits = sortie.usage.get("tokens_entree"), sortie.usage.get("tokens_sortie")
+        contexte, budget = self.contexte_de(nom, modele), self.max_tokens_de(modele, etape)
+        if lus and produits and contexte and lus + produits >= 0.95 * contexte:
+            cause = (f"réponse coupée : fenêtre de contexte de {nom} pleine ({lus} tokens lus + {produits} produits "
+                     f"≈ {contexte})")
+        elif produits:
+            cause = f"réponse coupée : budget de sortie de {budget} tokens épuisé ({produits} produits)"
+        else:
+            cause = f"réponse coupée : budget de sortie de {budget} tokens ou fenêtre de contexte atteint"
+        if sortie.raisonnement:
+            cause += f", dont {len(sortie.raisonnement)} caractères de réflexion"
+        return cause
 
     async def _flux(self, client, modele, thinking, etape, messages, mode, on_flux, schema=None):
         max_tokens = self.max_tokens_de(modele, etape)

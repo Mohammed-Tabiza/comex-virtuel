@@ -80,7 +80,15 @@ ollama create nemotron-3-nano:4b-32k -f Modelfile.nemotron
 ```
 
 puis indiquez dans `config.yaml` le nom du nouveau modèle et son vrai contexte (`contexte_max`) : un appel dont
-l'entrée estimée plus la sortie maximale dépasse `contexte_max` est refusé avant envoi.
+l'entrée estimée plus la sortie maximale dépasse `contexte_max` est refusé avant envoi. Au démarrage, le serveur
+demande à Ollama le `num_ctx` réel de chaque modèle et retient la plus petite des deux valeurs (affichée dans la
+console) : un `contexte_max` surestimé ne peut plus masquer une fenêtre trop petite. Une réponse coupée indique si
+la fenêtre de contexte était pleine ou si le budget de sortie était épuisé.
+
+**Durée maximale d'un appel.** `protocole.delai_max_appel` (600 s par défaut) : au-delà, l'appel est interrompu et
+relancé une fois (sans réflexion), puis traité comme une erreur. Si les appels sont très lents, la carte graphique
+déborde probablement sur le processeur (`ollama ps`, colonne PROCESSOR) : réduisez `concurrence_max`, utilisez un
+seul modèle, ou activez `OLLAMA_FLASH_ATTENTION=1` et `OLLAMA_KV_CACHE_TYPE=q8_0`.
 
 **Réflexion des modèles (`thinking`).** Avec `famille: ollama`, `thinking: false` coupe la réflexion
 (`reasoning_effort: none`) ; sinon les modèles « thinking » (Nemotron, Gemma 4) réfléchissent par défaut, et

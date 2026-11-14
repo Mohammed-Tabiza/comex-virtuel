@@ -9,7 +9,14 @@ from pathlib import Path
 
 import yaml
 
-REF = re.compile(r"\[?(D\d+-§\d+)\]?")
+# Les modèles écrivent parfois un trait d'union insécable (U+2011) ou typographique : D0‑§6, D0–§6.
+TIRETS = "\u2010\u2011\u2012\u2013\u2014\u2212"
+REF = re.compile(rf"\[?(D\d+[-{TIRETS}]§\d+)\]?")
+
+
+def normaliser_ref(ref: str) -> str:
+    """Forme canonique d'une référence : D0‑§6 → D0-§6."""
+    return re.sub(f"[{TIRETS}]", "-", str(ref).strip())
 
 
 @dataclass
@@ -43,6 +50,7 @@ class Dossier:
         return {s.ref for d in self.documents for s in d.sections}
 
     def section(self, ref: str) -> Section | None:
+        ref = normaliser_ref(ref)
         for d in self.documents:
             for s in d.sections:
                 if s.ref == ref:
@@ -114,7 +122,7 @@ def refs_citees(obj) -> set[str]:
     """Toutes les références [Dx-§y] présentes dans une contribution (récursif)."""
     trouvees: set[str] = set()
     if isinstance(obj, str):
-        trouvees |= set(REF.findall(obj))
+        trouvees |= {normaliser_ref(r) for r in REF.findall(obj)}
     elif isinstance(obj, dict):
         for v in obj.values():
             trouvees |= refs_citees(v)

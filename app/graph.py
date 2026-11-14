@@ -24,7 +24,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
 from . import agents as A
-from .dossier import REF, refs_citees
+from .dossier import REF, normaliser_ref, refs_citees
 from .llm import Modeles
 from .runtime import seance_de
 
@@ -320,11 +320,28 @@ def ecarts_synthese(synthese: dict, cadrage: dict, refs: set[str]) -> list[str]:
     sources = [s for o in synthese.get("options", [])
                for bloc in (o.get("criteres", []), o.get("preuves", [])) for x in bloc for s in x.get("sources", [])]
     hors_dossier = sorted({str(s) for s in sources
-                           if not ((m := REF.fullmatch(str(s).strip())) and m.group(1) in refs)})
+                           if not ((m := REF.fullmatch(str(s).strip())) and normaliser_ref(m.group(1)) in refs)})
     if hors_dossier:
         ecarts.append(f"La synthèse cite {len(hors_dossier)} source(s) qui ne sont pas des sections du dossier : "
                       f"{' ; '.join(hors_dossier[:5])}.")
     return ecarts
+
+
+def positions_des_membres(state: Etat) -> dict:
+    """Positions initiales et finales de chaque expert, calculées à partir des contributions.
+
+    Données au président pour qu'il n'ait pas à les reconstituer (constaté : RH et Opérations inversés
+    dans la synthèse de la séance 1d11bf86).
+    """
+    tableau = {}
+    for e, avis in _avis_par_expert(state).items():
+        rep_ = sans_meta(state.get("reponses", {}).get(f"{e}:reponse"))
+        tableau[e] = {
+            "option_initiale": avis.get("option_preferee"), "position_initiale": avis.get("position"),
+            "option_finale": rep_.get("option_revisee") or avis.get("option_preferee"),
+            "position_finale": rep_.get("position_revisee") or avis.get("position"),
+        }
+    return tableau
 
 
 async def synthese(state: Etat, config: RunnableConfig):
@@ -335,7 +352,8 @@ async def synthese(state: Etat, config: RunnableConfig):
     res, err = await appeler(config, "president", "synthese",
                              A.prompt_synthese(sans_meta(state["cadrage"]), avis, sans_meta(state.get("contre_analyse")),
                                                state.get("objections", []), reponses,
-                                               sans_meta(state.get("replique")), lacunes),
+                                               sans_meta(state.get("replique")), lacunes,
+                                               positions_des_membres(state)),
                              schema=A.schema_synthese(sans_meta(state["cadrage"])))
     suivi = _suivi(res, err, "president", "synthese")
     if not res:

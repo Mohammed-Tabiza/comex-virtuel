@@ -284,7 +284,7 @@ const S = {config:null, configLive:null, seance:null, dossier:null, source:null,
 const pause = ms => new Promise(r => setTimeout(r, ms));
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const avecRefs = s => esc(s).replace(/\[?(D\d+-§\d+)\]?/g, (_, r) => chipRef(r));
+const avecRefs = s => esc(s).replace(/\[?(D\d+[-\u2010-\u2014\u2212]§\d+)\]?/g, (_, r) => chipRef(r.replace(/[\u2010-\u2014\u2212]/, "-")));
 const chipRef = r => `<button type="button" class="ref ${S.refsValides.size && !S.refsValides.has(r) ? "invalide" : ""}" data-ref="${esc(r)}" data-dossier="${esc(S.dossier?.nom)}" title="${S.refsValides.has(r) ? "Voir la section" : "Référence introuvable dans le dossier"}">${esc(r)}</button>`;
 const sourcesRefs = refs => `<div class="sources">${[...new Set(refs || [])].map(r => avecRefs(r)).join(" ")}</div>`;
 const argumentSource = a => avecRefs(a.texte) + sourcesRefs(a.sources);

@@ -29,6 +29,8 @@ ETAT = {"config": None, "graphe": None, "taches": set()}
 async def cycle_de_vie(app: FastAPI):
     ETAT["config"] = charger_config()
     G.MODELES = Modeles(ETAT["config"])
+    for message in await asyncio.to_thread(G.MODELES.verifier_contextes):
+        print("Contexte des modèles :", message)
     ETAT["graphe"] = G.construire_graphe()
     print(f"COMEX virtuel prêt : mode {ETAT['config']['mode']}")
     yield

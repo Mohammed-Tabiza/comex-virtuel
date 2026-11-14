@@ -318,7 +318,8 @@ def prompt_replique(objections: list, reponses: dict) -> str:
 
 
 def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections: list, reponses: dict,
-                    replique: dict | None = None, lacunes: list | None = None) -> str:
+                    replique: dict | None = None, lacunes: list | None = None,
+                    positions: dict | None = None) -> str:
     texte = _role("president") + _bloc("Cadrage", cadrage) + _bloc("Avis initiaux", avis) + \
         _bloc("Contre-analyse", contre_analyse) + _bloc("Objections", objections) + \
         _bloc("Réponses aux objections et réactions entre membres", reponses)
@@ -326,10 +327,14 @@ def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections:
         texte += _bloc("Réplique du contradicteur (statut de chaque objection)", replique)
     if lacunes:
         texte += _bloc("Lacunes du débat (contributions manquantes)", lacunes)
+    if positions:
+        texte += _bloc("Positions des membres, initiales et finales (calculées à partir des contributions, "
+                       "elles font foi)", positions)
     return texte + (
         "## Tâche : synthèse pour le décideur\n"
         "Restitue les options avec leurs arguments pour et contre, les accords, les désaccords persistants "
-        "(en nommant les positions), les hypothèses fragiles et les informations à obtenir. "
+        "(en nommant les positions, telles que les donne le tableau des positions finales, sans en oublier ni en "
+        "inverser), les hypothèses fragiles et les informations à obtenir. "
         "Formule une recommandation conditionnelle : ce qu'il faudrait décider, et à quelles conditions. "
         "Restitue TOUTES les options du cadrage, chacune avec son identifiant (id : A, B, C...), même celles que "
         "tu écartes. Pour chacune, évalue chaque critère validé en reprenant son libellé exact "
