@@ -1,0 +1,4 @@
+# Métadonnées du dossier de séance.
+# Cas fictif (Banque Rhodanienne) : il peut être envoyé à des modèles externes.
+confidentiel: false
+description: "Cas fictif (Banque Rhodanienne) : trajectoire du système central bancaire après 2027"
