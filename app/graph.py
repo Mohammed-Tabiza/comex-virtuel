@@ -420,7 +420,7 @@ def attributions_inexactes(synthese: dict, positions: dict, options: list) -> li
     ids = {str(o.get("id", "")).strip().upper() for o in options}
     ecarts = []
     for d in synthese.get("desaccords", []):
-        texte, debut, camps = str(d.get("positions", "")), 0, {}
+        texte, debut, camps, groupes = str(d.get("positions", "")), 0, {}, []
         # Chaque « (option X » ferme un camp : ses membres sont le texte depuis la fin du camp précédent, quel que
         # soit le séparateur (« vs. », « contre », « ; », « . »). Constaté : « Finance (Option A : …). Stratégie (…) ».
         for m in OPTION_CAMP.finditer(texte):
@@ -431,6 +431,7 @@ def attributions_inexactes(synthese: dict, positions: dict, options: list) -> li
             if not membres or m.group(1).upper() not in ids:              # pas « membres (option …) »
                 continue
             option = m.group(1).upper()
+            groupes.append((membres, option))
             for e in membres:
                 camps[e] = camps.get(e, 0) + 1
                 finale = str((positions.get(e) or {}).get("option_finale") or "").strip().upper()
@@ -441,7 +442,23 @@ def attributions_inexactes(synthese: dict, positions: dict, options: list) -> li
         ecarts += [f"La synthèse oppose {A.AGENTS[e]['nom']} à lui-même dans le désaccord « {d.get('sujet', '')} » : "
                    f"un membre ne figure que dans un camp, avec sa position finale."
                    for e, n in camps.items() if n > 1]
+        # Constaté (3d86793e, après relance) : « Stratégie, Finance, Clients, Opérations, Risques, RH (Option C : …) »,
+        # un seul camp et personne en face. Un membre cité hors du camp (« contre Opérations, qui… ») suffit à
+        # considérer qu'il y a une opposition.
+        if len(groupes) == 1 and _membres_cites(texte) <= set(groupes[0][0]):
+            noms = ", ".join(A.AGENTS[e]["nom"] for e in groupes[0][0])
+            ecarts.append(f"Le désaccord « {d.get('sujet', '')} » ne présente qu'un camp ({noms}, option "
+                          f"{groupes[0][1]}) : personne ne s'y oppose. Un désaccord oppose au moins deux camps ; "
+                          f"sinon, ce point relève des accords.")
     return ecarts
+
+
+def _membres_cites(texte: str) -> set[str]:
+    """Membres nommés n'importe où dans un texte, sous leur nom ou un alias."""
+    texte = _sans_accents(texte)
+    return {e for e in A.EXPERTS
+            if any(re.search(rf"\b{re.escape(n)}\b", texte)
+                   for n in {e, _sans_accents(A.AGENTS[e]["nom"])} | set(ALIAS_MEMBRES.get(e, [])))}
 
 
 def positions_des_membres(state: Etat) -> dict:
@@ -483,7 +500,8 @@ async def synthese(state: Etat, config: RunnableConfig):
         # range un membre sur son option initiale. Une relance, avec les erreurs nommées, avant d'en faire une lacune.
         await seance.publier("relance", agent="president", etape="synthese",
                              message="Synthèse relancée : des désaccords attribuaient à des membres une autre option "
-                                     "que leur position finale, ou les opposaient à eux-mêmes.", details=attributions)
+                                     "que leur position finale, les opposaient à eux-mêmes ou n'avaient qu'un camp.",
+                             details=attributions)
         res2, err2 = await appeler(config, "president", "synthese",
                                    consigne + A.correction_attributions(attributions, positions), schema=schema)
         suivi2 = _suivi(res2, err2, "president", "synthese")

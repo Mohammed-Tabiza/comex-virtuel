@@ -420,7 +420,9 @@ def correction_attributions(attributions: list, positions: dict) -> str:
                  "\nOptions finales de chaque membre (elles font foi, ne les confonds pas avec les avis initiaux) : " +
                  ", ".join(f"{n} → {o}" for n, o in finales.items()) +
                  ".\nRefais la synthèse complète en rangeant chaque membre, dans chaque désaccord, sur son option finale, "
-                 "dans un seul camp : n'oppose jamais un membre à lui-même (son avis initial à sa position finale).")
+                 "dans un seul camp : n'oppose jamais un membre à lui-même (son avis initial à sa position finale). "
+                 "Un désaccord oppose au moins deux camps (options différentes, ou même option pour des raisons "
+                 "ou conditions différentes) ; s'il ne reste qu'un camp, place ce point dans les accords.")
 
 
 def prompt_synthese(cadrage: dict, avis: dict, contre_analyse: dict, objections: list, reponses: dict,

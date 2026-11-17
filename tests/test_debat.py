@@ -676,3 +676,18 @@ class AjustementsC009Tests(unittest.TestCase):
             {"risques": {"option_finale": "C"}}, [{"id": "A"}, {"id": "C"}])
         self.assertEqual(len(ecarts), 1)
         self.assertIn("oppose Risques à lui-même", ecarts[0])
+
+
+class DesaccordUnCampTests(AttributionsTests):
+    """Séance 3d86793e : après relance, un « désaccord » qui range les six membres sur C, sans personne en face."""
+
+    def test_un_seul_camp_signale(self):
+        ecarts = self.ecarts("Stratégie et Opérations (Option C : prioriser la validation progressive).")
+        self.assertEqual(len(ecarts), 1)
+        self.assertIn("ne présente qu'un camp", ecarts[0])
+
+    def test_meme_option_pour_des_raisons_differentes_admise(self):
+        self.assertEqual(self.ecarts("Stratégie (Option C : sans condition) vs Opérations (Option C : après tests)"), [])
+
+    def test_adversaire_nomme_hors_camp_admis(self):
+        self.assertEqual(self.ecarts("Stratégie (Option C : prudence), contre la Finance qui juge le ROI suffisant."), [])

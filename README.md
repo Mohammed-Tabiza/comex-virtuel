@@ -65,7 +65,8 @@ Pour revenir à la simulation, définissez `$env:COMEX_MODE = "simulation"` puis
    Sont aussi des lacunes : un message tronqué par le serveur du modèle (tokens lus < 70 % des tokens estimés),
    une réponse qui ne cite pas les objections reçues (O4...), une synthèse qui omet une option ou un critère du
    cadrage, qui cite des sources hors dossier, ou dont un désaccord range un membre sur une autre option que sa
-   position finale (« Stratégie (A : …) » alors que la Stratégie a fini sur C) ou l'oppose à lui-même. Dans ce cas, la synthèse
+   position finale (« Stratégie (A : …) » alors que la Stratégie a fini sur C), l'oppose à lui-même, ou ne présente
+   qu'un camp sans personne en face (deux camps sur la même option pour des raisons différentes restent admis). Dans ce cas, la synthèse
    est d'abord relancée une fois avec les erreurs nommées (environ une minute de plus), et la meilleure des deux
    est retenue ; l'interface signale la relance.
 
