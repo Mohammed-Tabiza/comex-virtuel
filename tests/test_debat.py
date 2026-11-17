@@ -6,7 +6,7 @@ from pathlib import Path
 from langgraph.types import Command
 
 from app import graph as G
-from app import simulation
+from app import agents as A, simulation
 from app.agents import EXPERTS, prompt_reponse
 from app.config import charger_config
 from app.dossier import charger_dossier
@@ -691,3 +691,26 @@ class DesaccordUnCampTests(AttributionsTests):
 
     def test_adversaire_nomme_hors_camp_admis(self):
         self.assertEqual(self.ecarts("Stratégie (Option C : prudence), contre la Finance qui juge le ROI suffisant."), [])
+
+
+class OptionsSansDefenseurTests(unittest.TestCase):
+    """Séance 0a2928a1 (coeur-bancaire-2027) : l'option C, choisie par personne, n'a reçu aucune objection."""
+    OPTIONS = [{"id": "A", "nom": "Migration SaaS"}, {"id": "B", "nom": "Modernisation progressive"},
+               {"id": "C", "nom": "Plateforme mutualisée"}]
+
+    def test_option_sans_defenseur_et_avis_defavorable(self):
+        avis = {"finance": {"position": "favorable", "option_preferee": "B"},
+                "risques": {"position": "defavorable", "option_preferee": "A"}}   # contre A : ne la défend pas
+        self.assertEqual([o["id"] for o in G.options_sans_defenseur(self.OPTIONS, avis)], ["A", "C"])
+
+    def test_option_nommee_par_identifiant_ou_par_nom(self):
+        c = self.OPTIONS[2]
+        self.assertTrue(G._nomme_option("Pourquoi écarter l'Option C, seule sous le plafond ?", c))
+        self.assertTrue(G._nomme_option("La plateforme mutualisee respecte le plafond.", c))
+        self.assertFalse(G._nomme_option("Le coût de l'option B est sous-estimé (Coût total : 40 M€).", c))
+
+    def test_consignes(self):
+        texte = A.prompt_objections({}, {}, {"finance": {}}, [self.OPTIONS[2]])
+        self.assertIn("Options qu'aucun membre ne défend : option C (Plateforme mutualisée)", texte)
+        self.assertNotIn("aucun membre ne défend", A.prompt_objections({}, {}, {"finance": {}}))
+        self.assertIn("refais le produit", A.prompt_contre_analyse({}))

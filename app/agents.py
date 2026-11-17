@@ -347,10 +347,26 @@ def prompt_contre_analyse(cadrage: dict) -> str:
         "## Tâche : contre-analyse indépendante\n"
         "Sans connaître les avis des membres, identifie les hypothèses les plus fragiles du dossier, "
         "les scénarios dans lesquels chaque option échouerait, et les angles morts du cadrage.\n"
+        "Vérifie aussi les calculs du dossier : quand il donne un nombre d'unités et un coût ou une durée par "
+        "unité (modules, sites, postes, lots...), refais le produit et compare-le au total ou au calendrier "
+        "annoncé ; refais de même les sommes par année. Tout écart notable est une hypothèse fragile : écris le "
+        "calcul (ex. « 12 sites × 0,8 M€ = 9,6 M€, contre 6 M€ annoncés ») et cite les sections concernées.\n"
     ) + _schema("contre_analyse")
 
 
-def prompt_objections(cadrage: dict, contre_analyse: dict, avis: dict) -> str:
+def _consigne_options_orphelines(orphelines: list | None) -> str:
+    """Constaté (0a2928a1, coeur-bancaire-2027) : l'option C, choisie par aucun membre, n'a reçu aucune objection
+    ni aucun débat, alors que le dossier la présente comme la seule à respecter le plafond chaque année."""
+    if not orphelines:
+        return ""
+    liste = ", ".join(f"option {o.get('id')} ({o.get('nom', '')})" for o in orphelines)
+    return ("Options qu'aucun membre ne défend : " + liste + ". Une option écartée sans examen est un angle mort. "
+            "Pour chacune, formule au moins une objection qui la défend avec les éléments du dossier : adresse-la "
+            "au membre qui l'écarte avec le moins de raisons et demande-lui pourquoi il ne la retient pas. "
+            "Nomme-la par son identifiant (« option X ») dans le texte de l'objection.\n")
+
+
+def prompt_objections(cadrage: dict, contre_analyse: dict, avis: dict, orphelines: list | None = None) -> str:
     membres = ", ".join(avis)
     return _role("contradicteur") + _bloc("Cadrage", cadrage) + _bloc("Ta contre-analyse", contre_analyse) + \
         _bloc("Avis des membres", avis) + (
@@ -359,19 +375,26 @@ def prompt_objections(cadrage: dict, contre_analyse: dict, avis: dict) -> str:
         "personne n'échappe à la contradiction. Tu peux en adresser plusieurs au même membre si son argument "
         "pèse lourd dans la décision. Vise les arguments les plus importants pour la décision, pas les détails. "
         "Numérote les identifiants O1, O2...\n"
-    ) + _schema("objections")
+    ) + _consigne_options_orphelines(orphelines) + _schema("objections")
 
 
 def prompt_objections_complement(cadrage: dict, contre_analyse: dict, avis_manquants: dict,
-                                 deja: list, premier_numero: int) -> str:
-    """Relance du contradicteur pour les membres qu'il n'a pas challengés au premier passage."""
-    return _role("contradicteur") + _bloc("Cadrage", cadrage) + _bloc("Ta contre-analyse", contre_analyse) + \
-        _bloc("Objections déjà formulées", deja) + _bloc("Avis des membres non encore challengés", avis_manquants) + (
-        "## Tâche : objections complémentaires\n"
-        "Ces membres n'ont reçu aucune objection. Formule au moins une objection précise pour chacun d'eux "
-        "(champ cible), sur l'argument de son avis le plus déterminant pour la décision. "
-        f"Numérote à partir de O{premier_numero}.\n"
-    ) + _schema("objections")
+                                 deja: list, premier_numero: int, orphelines: list | None = None,
+                                 avis: dict | None = None) -> str:
+    """Relance du contradicteur pour les membres qu'il n'a pas challengés au premier passage, et pour les options
+    qu'aucun membre ne défend et qu'aucune objection n'a examinées."""
+    texte = _role("contradicteur") + _bloc("Cadrage", cadrage) + _bloc("Ta contre-analyse", contre_analyse) + \
+        _bloc("Objections déjà formulées", deja)
+    if avis_manquants:
+        texte += _bloc("Avis des membres non encore challengés", avis_manquants)
+    if orphelines and avis:
+        texte += _bloc("Avis des membres", avis)
+    texte += "## Tâche : objections complémentaires\n"
+    if avis_manquants:
+        texte += ("Ces membres n'ont reçu aucune objection. Formule au moins une objection précise pour chacun "
+                  "d'eux (champ cible), sur l'argument de son avis le plus déterminant pour la décision.\n")
+    return texte + _consigne_options_orphelines(orphelines) + \
+        f"Numérote à partir de O{premier_numero}.\n" + _schema("objections")
 
 
 def prompt_reponse(agent_id: str, avis_propre: dict, objections: list, autres_avis: dict) -> str:

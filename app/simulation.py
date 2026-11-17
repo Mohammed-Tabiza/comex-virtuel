@@ -145,7 +145,7 @@ OBJECTIONS = {"objections": [
     {"id": "O3", "cible": "operations", "texte": "Si l'infrastructure se dégrade à 74 utilisateurs simultanés, l'option C à 600 utilisateurs pose le même problème. Que proposes-tu concrètement ?", "sources": ["D1-§2", "D2-§3"]},
     {"id": "O4", "cible": "clients", "texte": "Une relecture obligatoire peut absorber le gain de temps déclaré. Ton option A sous condition reste-t-elle rentable ?", "sources": ["D1-§3", "D1-§4"]},
     {"id": "O5", "cible": "rh", "texte": "Tu supposes que le CSE acceptera une extension progressive. Passer à 600 personnes ne déclenche-t-il pas déjà la consultation ?", "sources": ["D0-§5", "D4-§2"]},
-    {"id": "O6", "cible": "risques", "texte": "Tu écartes B pour le support hors UE, mais A et C ont déjà connu deux saisies de données sensibles. Pourquoi le risque interne serait-il plus maîtrisable que le risque contractuel ?", "sources": ["D1-§4", "D3-§2"]},
+    {"id": "O6", "cible": "risques", "texte": "Tu écartes l'option B pour le support hors UE, mais A et C ont déjà connu deux saisies de données sensibles. Pourquoi le risque interne serait-il plus maîtrisable que le risque contractuel ?", "sources": ["D1-§4", "D3-§2"]},
 ]}
 
 REPONSES = {

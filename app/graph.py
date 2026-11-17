@@ -217,12 +217,29 @@ def _recevables(brutes: list, avis: dict, deja: list) -> tuple[list, list]:
     return retenues, incidents
 
 
+def options_sans_defenseur(options: list, avis: dict) -> list[dict]:
+    """Options du cadrage qu'aucun membre ne préfère (un avis défavorable à une option ne la défend pas)."""
+    defendues = {str(a.get("option_preferee") or "").strip().upper() for a in avis.values()
+                 if a.get("position") != "defavorable"}
+    return [o for o in options if str(o.get("id", "")).strip().upper() not in defendues]
+
+
+def _nomme_option(texte: str, option: dict) -> bool:
+    """« option C », « l'Option C » ou le nom de l'option dans le texte d'une objection."""
+    oid = re.escape(str(option.get("id", "")).strip())
+    nom = _sans_accents(option.get("nom", "")).strip()
+    return bool(re.search(rf"\boptions?\s+{oid}\b", texte, re.IGNORECASE)) or \
+        (len(nom) > 3 and nom in _sans_accents(texte))
+
+
 async def challenge(state: Etat, config: RunnableConfig):
     await seance_de(config).publier("phase", phase="contradiction")
     avis = _avis_par_expert(state)
     cadrage_, contre = sans_meta(state["cadrage"]), sans_meta(state.get("contre_analyse"))
     erreurs: list = []
-    res, err = await appeler(config, "contradicteur", "objections", A.prompt_objections(cadrage_, contre, avis))
+    orphelines = options_sans_defenseur(cadrage_.get("options", []), avis)
+    res, err = await appeler(config, "contradicteur", "objections",
+                             A.prompt_objections(cadrage_, contre, avis, orphelines))
     suivi = _suivi(res, err, "contradicteur", "objections")
     erreurs += suivi.get("erreurs", [])
     tronques = suivi.get("tronques", [])
@@ -230,15 +247,18 @@ async def challenge(state: Etat, config: RunnableConfig):
     erreurs += incidents
 
     # Couverture : chaque expert ayant rendu un avis doit être challengé ; relance ciblée sinon.
+    # Même relance pour une option qu'aucun membre ne défend et qu'aucune objection ne nomme.
     manquants = {e: v for e, v in avis.items() if e not in {o["cible"] for o in objections}}
-    if manquants and res:
+    non_examinees = [o for o in orphelines if not any(_nomme_option(x.get("texte", ""), o) for x in objections)]
+    if (manquants or non_examinees) and res:
         res2, err2 = await appeler(config, "contradicteur", "objections",
                                    A.prompt_objections_complement(cadrage_, contre, manquants, objections,
-                                                                  len(objections) + 1))
+                                                                  len(objections) + 1, non_examinees, avis))
         suivi = _suivi(res2, err2, "contradicteur", "objections")
         erreurs += suivi.get("erreurs", [])
         tronques += suivi.get("tronques", [])
-        complement, incidents = _recevables((res2 or {}).get("objections", []), manquants, objections)
+        complement, incidents = _recevables((res2 or {}).get("objections", []),
+                                            avis if non_examinees else manquants, objections)
         objections += complement
         erreurs += incidents
     return {"objections": objections, "erreurs": erreurs, "tronques": tronques}

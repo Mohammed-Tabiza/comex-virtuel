@@ -53,9 +53,11 @@ Pour revenir à la simulation, définissez `$env:COMEX_MODE = "simulation"` puis
 1. **Cadrage** : le président reformule la question, les options, les critères et les inconnues.
 2. **Validation humaine** : la séance s'arrête. Vous validez, ou apportez des précisions et demandez un nouveau cadrage.
 3. **Analyses indépendantes** : les six experts et la contre-analyse du contradicteur tournent en parallèle,
-   **sans voir les avis des autres**.
+   **sans voir les avis des autres**. La contre-analyse refait aussi les calculs du dossier (nombre d'unités ×
+   coût ou durée unitaire, sommes par année) et signale les écarts avec les totaux annoncés.
 4. **Contradiction** : le contradicteur lit tous les avis et adresse des objections ciblées, **au moins une par
-   expert** ; s'il en oublie un, il est relancé pour les experts non challengés.
+   expert**, et **au moins une par option qu'aucun membre ne défend** (une objection qui la défend, adressée à
+   un membre qui l'écarte) ; s'il oublie un expert ou une telle option, il est relancé une fois.
 5. **Réponses** : chaque expert maintient, ajuste ou concède, puis réagit aux avis des autres membres, qu'il
    découvre à ce moment (accords et désaccords explicites).
 6. **Réplique** : le contradicteur juge chaque objection résolue, partiellement résolue ou non résolue.
